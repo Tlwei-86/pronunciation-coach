@@ -2,21 +2,66 @@ package com.pronunciationcoach.app.domain
 
 interface AudioSource {
     val sourceName: String
-    suspend fun startCapture()
-    suspend fun readChunk(): FloatArray
-    suspend fun stopCapture()
+    val isAvailable: Boolean
+        get() = true
+
+    suspend fun startRecording()
+    suspend fun stopRecording(): AudioSampleData
 }
 
 class MicrophoneAudioSource : AudioSource {
     override val sourceName: String = "Microphone (16kHz Mono)"
-    override suspend fun startCapture() {}
-    override suspend fun readChunk(): FloatArray = FloatArray(320) { 0.0f }
-    override suspend fun stopCapture() {}
+    override val isAvailable: Boolean = true
+
+    override suspend fun startRecording() {}
+
+    override suspend fun stopRecording(): AudioSampleData {
+        val dummyPcm = ByteArray(3200) { 0 }
+        return AudioSampleData(
+            sampleRate = 16000,
+            channelCount = 1,
+            pcmData = dummyPcm,
+            durationMs = 600L,
+            sourceDescription = sourceName
+        )
+    }
 }
 
-class WavFileAudioSource(val fileName: String) : AudioSource {
-    override val sourceName: String = "WAV File: \$fileName"
-    override suspend fun startCapture() {}
-    override suspend fun readChunk(): FloatArray = FloatArray(320) { 0.05f }
-    override suspend fun stopCapture() {}
+class WavFileAudioSource(
+    val fileName: String,
+    override val sourceName: String,
+    private val simulatedDurationMs: Long = 620L
+) : AudioSource {
+    override val isAvailable: Boolean = true
+
+    override suspend fun startRecording() {}
+
+    override suspend fun stopRecording(): AudioSampleData {
+        val dummyPcm = ByteArray(simulatedDurationMs.toInt() * 32) { 1 }
+        return AudioSampleData(
+            sampleRate = 16000,
+            channelCount = 1,
+            pcmData = dummyPcm,
+            durationMs = simulatedDurationMs,
+            sourceDescription = sourceName
+        )
+    }
+
+    companion object {
+        fun createCanonicalFunk(): WavFileAudioSource {
+            return WavFileAudioSource(
+                fileName = "funk_good.wav",
+                sourceName = "funk_good.wav (/fʌŋk/ Canonical)",
+                simulatedDurationMs = 620L
+            )
+        }
+
+        fun createConfusedAhFunk(): WavFileAudioSource {
+            return WavFileAudioSource(
+                fileName = "funk_ah_like.wav",
+                sourceName = "funk_ah_like.wav (/fɑŋk/ Confused Vowel)",
+                simulatedDurationMs = 700L
+            )
+        }
+    }
 }
