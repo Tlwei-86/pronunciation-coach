@@ -204,7 +204,7 @@ class PracticeViewModel(
                 isEvaluating = false,
                 evaluationResult = result,
                 audioSourceLabel = sourceDesc,
-                videoSourceLabel = "Jaw: ${String.format("%.2f", evidence.visualFeatures.jawOpen)} | Lip: ${String.format("%.2f", evidence.visualFeatures.lipRoundness)}",
+                videoSourceLabel = "Jaw: ${evidence.visualFeatures.jawOpen} | Lip: ${evidence.visualFeatures.lipRoundness}",
                 liveJawOpen = evidence.visualFeatures.jawOpen,
                 liveLipRoundness = evidence.visualFeatures.lipRoundness,
                 statusMessage = "Analysis completed via ${result.providerUsed}"
