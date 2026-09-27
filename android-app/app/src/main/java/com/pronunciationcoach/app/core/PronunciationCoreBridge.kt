@@ -106,7 +106,7 @@ object PronunciationCoreBridge {
     )
 
     fun scoreFunk(targetProb: Float, confusionProb: Float, jawOpen: Float, lipRoundness: Float): String {
-        val estimatedTongueHeight = (1.0f - jawOpen * 0.70f).coerceIn(0f, 1f)
+        val estimatedTongueHeight = (0.80f - jawOpen * 0.65f).coerceIn(0f, 1f)
         val estimatedTongueBackness = (0.50f + (1.0f - lipRoundness) * 0.10f).coerceIn(0f, 1f)
         return scoreFunkWithTongue(
             targetProb,
@@ -143,7 +143,7 @@ object PronunciationCoreBridge {
     ): String {
         val isAcousticGood = targetProb >= 0.70f
         val isVisualGood = jawOpen <= 0.45f
-        val isTongueGood = tongueHeight in 0.38f..0.72f && tongueBackness in 0.32f..0.68f
+        val isTongueGood = tongueHeight in 0.38f..0.75f && tongueBackness in 0.32f..0.68f
         val isGood = isAcousticGood && isVisualGood && isTongueGood
 
         val tongueScore = if (isTongueGood) {
@@ -242,7 +242,7 @@ object PronunciationCoreBridge {
     }
 
     private fun fallbackScoreFunk(targetProb: Float, confusionProb: Float, jawOpen: Float, lipRoundness: Float): String {
-        val estimatedTongueHeight = (1.0f - jawOpen * 0.70f).coerceIn(0f, 1f)
+        val estimatedTongueHeight = (0.80f - jawOpen * 0.65f).coerceIn(0f, 1f)
         val estimatedTongueBackness = (0.50f + (1.0f - lipRoundness) * 0.10f).coerceIn(0f, 1f)
         return fallbackScoreFunkWithTongue(
             targetProb,
@@ -263,8 +263,8 @@ object PronunciationCoreBridge {
         val confusionProb = acoustic?.optDouble("confusionPhonemeProb", 0.15)?.toFloat() ?: 0.15f
         val jawOpen = visual?.optDouble("jawOpen", 0.38)?.toFloat() ?: 0.38f
         val lipRoundness = visual?.optDouble("lipRoundness", 0.15)?.toFloat() ?: 0.15f
-        val tongueHeight = articulatory?.optDouble("tongueHeight", (1.0 - jawOpen * 0.70))?.toFloat()
-            ?: (1.0f - jawOpen * 0.70f).coerceIn(0f, 1f)
+        val tongueHeight = articulatory?.optDouble("tongueHeight", (0.80 - jawOpen * 0.65))?.toFloat()
+            ?: (0.80f - jawOpen * 0.65f).coerceIn(0f, 1f)
         val tongueBackness = articulatory?.optDouble("tongueBackness", 0.48)?.toFloat() ?: 0.48f
         return fallbackScoreFunkWithTongue(
             targetProb,

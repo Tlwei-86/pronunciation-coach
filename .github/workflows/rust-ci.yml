@@ -3,19 +3,37 @@ name: Rust CI
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'pronunciation-core/**'
+      - '.github/workflows/rust-ci.yml'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - 'pronunciation-core/**'
+      - '.github/workflows/rust-ci.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    name: Core Lints & Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pronunciation-core -> target
 
       - name: Rustfmt Check
         working-directory: pronunciation-core
