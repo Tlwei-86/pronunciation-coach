@@ -14,7 +14,6 @@ on:
       - 'docs/**'
       - '.gitignore'
 
-# 1. 自动取消旧提交的排队任务，节省构建时间
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -29,7 +28,6 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      # 2. 浅克隆加速
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
@@ -54,11 +52,13 @@ jobs:
         with:
           targets: aarch64-linux-android
 
-      # 3. 极速获取 pre-built cargo-ndk 二进制 (相比 cargo install 省去 50+ 秒源码编译)
-      - name: Install cargo-ndk (Prebuilt Binary)
-        uses: taiki-e/install-action@cargo-ndk
+      # 极速获取 prebuilt cargo-ndk 二进制 (省去 cargo install 耗时)
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
 
-      # 4. 启用 Rust 编译缓存
+      # 启用 Rust 编译缓存
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -72,20 +72,20 @@ jobs:
           mkdir -p ../android-app/app/src/main/jniLibs/arm64-v8a
           cargo ndk -t arm64-v8a -o ../android-app/app/src/main/jniLibs build --release
 
-      # 5. 使用官方最新 Gradle 专用缓存 Action (v4)
+      # 使用官方最新 Gradle 专用缓存 Action (v4)
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      # 6. 执行测试与 Debug APK 编译 (剔除无用 gradle wrapper 升级耗时)
+      # 执行测试与 Debug APK 编译
       - name: Build Debug APK & Run Unit Tests
         working-directory: android-app
         run: |
           chmod +x gradlew || true
           ./gradlew testDebugUnitTest assembleDebug --stacktrace
 
-      # 7. 上传 Artifact 供流水线归档下载
+      # 上传 Artifact 供流水线归档
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -93,22 +93,23 @@ jobs:
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
 
-      # 8. 自动化更新部署 (仅在 main 分支构建成功后发布到 GitHub Release)
+      # 自动化更新部署 (仅在 main 分支 push 成功后自动发布到 GitHub Release)
       - name: Deploy Update to GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RELEASE_TAG="v0.1.0-preview"
-          gh release create "$RELEASE_TAG" android-app/app/build/outputs/apk/debug/app-debug.apk \
+          cat << 'EOF' > release_notes.md
+          ### 🚀 Automated Update Deployment
+
+          - **Target Device**: OnePlus 8 / Android 8.0+ (ARM64 16KB Page Compatible)
+          - **Engine Components**: JNI Rust core `libpronunciation_core.so`, ONNX Runtime Mobile, CameraX & ML Kit Face Tracking.
+
+          #### 📲 Installation:
+          Download **`app-debug.apk`** below to install/update directly on your device.
+          EOF
+
+          gh release create "v0.1.0-preview" android-app/app/build/outputs/apk/debug/app-debug.apk \
             --title "Pronunciation Coach Preview (Latest Build)" \
-            --notes "### 🚀 Automated Update Deployment
-
-- **Commit**: \`${{ github.sha }}\`
-- **Trigger**: \`${{ github.event_name }}\` on \`main\`
-- **Target Device**: OnePlus 8 / Android 8.0+ (ARM64 16KB Page Compatible)
-- **Engine Components**: JNI Rust core \`libpronunciation_core.so\`, ONNX Runtime Mobile, CameraX & ML Kit Face Tracking.
-
-#### 📲 Installation:
-Download **\`app-debug.apk\`** below to install/update directly on your device." \
+            --notes-file release_notes.md \
             --clobber
