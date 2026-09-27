@@ -18,7 +18,12 @@ pub fn get_default_word_target(word: &str) -> Option<WordPhonemeTarget> {
     match word.to_lowercase().as_str() {
         "funk" => Some(WordPhonemeTarget {
             word: "funk".to_string(),
-            phonemes: vec!["f".to_string(), "ʌ".to_string(), "ŋ".to_string(), "k".to_string()],
+            phonemes: vec![
+                "f".to_string(),
+                "ʌ".to_string(),
+                "ŋ".to_string(),
+                "k".to_string(),
+            ],
         }),
         "ship" => Some(WordPhonemeTarget {
             word: "ship".to_string(),

@@ -2,15 +2,15 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum VisemeCategory {
-    Bilabial,       // /p/, /b/, /m/
-    Labiodental,    // /f/, /v/
-    Dental,         // /θ/, /ð/
-    Alveolar,       // /t/, /d/, /s/, /z/
-    OpenVowel,      // /ɑ/, /æ/
-    MidCentralVowel,// /ʌ/, /ə/
-    CloseVowel,     // /i/, /u/
-    RoundedVowel,   // /u/, /oʊ/, /w/
-    InternalVelar,  // /k/, /g/, /ŋ/ (invisible)
+    Bilabial,        // /p/, /b/, /m/
+    Labiodental,     // /f/, /v/
+    Dental,          // /θ/, /ð/
+    Alveolar,        // /t/, /d/, /s/, /z/
+    OpenVowel,       // /ɑ/, /æ/
+    MidCentralVowel, // /ʌ/, /ə/
+    CloseVowel,      // /i/, /u/
+    RoundedVowel,    // /u/, /oʊ/, /w/
+    InternalVelar,   // /k/, /g/, /ŋ/ (invisible)
 }
 
 pub fn get_phoneme_viseme_category(phoneme: &str) -> VisemeCategory {

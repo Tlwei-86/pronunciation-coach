@@ -37,7 +37,12 @@ pub struct EvidenceJson {
 }
 
 impl EvidenceJson {
-    pub fn new(target_word: &str, target_phoneme: &str, audio: AudioEvidence, visual: VisualEvidence) -> Self {
+    pub fn new(
+        target_word: &str,
+        target_phoneme: &str,
+        audio: AudioEvidence,
+        visual: VisualEvidence,
+    ) -> Self {
         Self {
             target_word: target_word.to_string(),
             target_phoneme: target_phoneme.to_string(),

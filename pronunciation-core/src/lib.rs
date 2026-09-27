@@ -33,7 +33,11 @@ mod tests {
         // High jaw opening (>0.65) and strong confusion with /ɑ/ (0.42)
         let report = DeterministicScorer::score_funk(0.48, 0.42, 0.72, 0.08);
         assert!(report.overall_score < 80);
-        let uh = report.phoneme_scores.iter().find(|p| p.phoneme == "ʌ").unwrap();
+        let uh = report
+            .phoneme_scores
+            .iter()
+            .find(|p| p.phoneme == "ʌ")
+            .unwrap();
         assert!(uh.is_primary_issue);
         assert_eq!(uh.likely_confusion.as_deref(), Some("ɑ"));
         assert_eq!(report.next_exercise, "minimal_pair_ʌ_ɑ");

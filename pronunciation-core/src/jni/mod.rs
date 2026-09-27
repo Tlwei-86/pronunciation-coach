@@ -10,7 +10,9 @@ pub extern "system" fn Java_com_pronunciationcoach_app_core_PronunciationCoreBri
     env: JNIEnv,
     _class: JClass,
 ) -> jstring {
-    let output = env.new_string("pronunciation-core v0.1.0 (Rust Core + JNI)").unwrap();
+    let output = env
+        .new_string("pronunciation-core v0.1.0 (Rust Core + JNI)")
+        .unwrap();
     output.into_raw()
 }
 
@@ -23,7 +25,8 @@ pub extern "system" fn Java_com_pronunciationcoach_app_core_PronunciationCoreBri
     jaw_open: jfloat,
     lip_roundness: jfloat,
 ) -> jstring {
-    let report = DeterministicScorer::score_funk(target_prob, confusion_prob, jaw_open, lip_roundness);
+    let report =
+        DeterministicScorer::score_funk(target_prob, confusion_prob, jaw_open, lip_roundness);
     let json_str = serde_json::to_string(&report).unwrap_or_else(|_| "{}".to_string());
     let output = env.new_string(json_str).unwrap();
     output.into_raw()
@@ -37,7 +40,12 @@ pub extern "system" fn Java_com_pronunciationcoach_app_core_PronunciationCoreBri
 ) -> jstring {
     let input: String = match env.get_string(&j_evidence) {
         Ok(s) => s.into(),
-        Err(_) => return env.new_string(r#"{"error":"Invalid string"}"#).unwrap().into_raw(),
+        Err(_) => {
+            return env
+                .new_string(r#"{"error":"Invalid string"}"#)
+                .unwrap()
+                .into_raw()
+        }
     };
 
     let result_json = match serde_json::from_str::<EvidenceJson>(&input) {
