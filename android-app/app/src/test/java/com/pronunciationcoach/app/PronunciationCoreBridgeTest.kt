@@ -38,6 +38,34 @@ class PronunciationCoreBridgeTest {
     }
 
     @Test
+    fun testScoreFunkWithTongue() {
+        val jsonGood = PronunciationCoreBridge.scoreFunkWithTongue(
+            targetProb = 0.92f,
+            confusionProb = 0.08f,
+            jawOpen = 0.25f,
+            lipRoundness = 0.12f,
+            tongueHeight = 0.54f,
+            tongueBackness = 0.46f
+        )
+        val objGood = JSONObject(jsonGood)
+        assertTrue("Good articulatory score should be >= 80, got ${objGood.getInt("overallScore")}", objGood.getInt("overallScore") >= 80)
+        assertEquals(0.54, objGood.getDouble("tongue_height"), 0.01)
+        assertEquals(0.46, objGood.getDouble("tongue_backness"), 0.01)
+
+        val jsonBad = PronunciationCoreBridge.scoreFunkWithTongue(
+            targetProb = 0.45f,
+            confusionProb = 0.65f,
+            jawOpen = 0.55f,
+            lipRoundness = 0.18f,
+            tongueHeight = 0.22f, // Flattened low tongue
+            tongueBackness = 0.28f
+        )
+        val objBad = JSONObject(jsonBad)
+        assertTrue("Bad tongue posture score should be <= 70, got ${objBad.getInt("overallScore")}", objBad.getInt("overallScore") <= 70)
+        assertTrue("Should detect /ɑ/ confusion", objBad.optString("detectedConfusion") == "/ɑ/")
+    }
+
+    @Test
     fun testAnalyzeEvidence() {
         val evidenceJson = JSONObject().apply {
             put("targetWord", "funk")

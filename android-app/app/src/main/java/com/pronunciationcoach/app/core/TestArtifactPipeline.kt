@@ -56,6 +56,7 @@ object TestArtifactPipeline {
             val options = FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
                 .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
                 .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
                 .build()
 
@@ -89,6 +90,12 @@ object TestArtifactPipeline {
         val mouthRight = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
         val noseBase = face.getLandmark(FaceLandmark.NOSE_BASE)?.position
 
+        val lipPoints = mutableListOf<android.graphics.PointF>()
+        face.getContour(com.google.mlkit.vision.face.FaceContour.UPPER_LIP_TOP)?.points?.let { lipPoints.addAll(it) }
+        face.getContour(com.google.mlkit.vision.face.FaceContour.UPPER_LIP_BOTTOM)?.points?.let { lipPoints.addAll(it) }
+        face.getContour(com.google.mlkit.vision.face.FaceContour.LOWER_LIP_TOP)?.points?.let { lipPoints.addAll(it) }
+        face.getContour(com.google.mlkit.vision.face.FaceContour.LOWER_LIP_BOTTOM)?.points?.let { lipPoints.addAll(it) }
+
         val boundingBox = face.boundingBox
         val faceHeight = max(100f, boundingBox.height().toFloat())
         val faceWidth = max(100f, boundingBox.width().toFloat())
@@ -112,7 +119,8 @@ object TestArtifactPipeline {
                 lipRoundness = roundness,
                 mouthWidthNormalized = normalizedWidth,
                 isFaceDetected = true,
-                statusText = status
+                statusText = status,
+                lipContourPoints = lipPoints
             )
         } else {
             return LiveFaceMouthMetrics(
@@ -120,7 +128,8 @@ object TestArtifactPipeline {
                 lipRoundness = 0.12f,
                 mouthWidthNormalized = 0.45f,
                 isFaceDetected = true,
-                statusText = "关键点部分被遮挡"
+                statusText = "关键点部分被遮挡",
+                lipContourPoints = lipPoints
             )
         }
     }

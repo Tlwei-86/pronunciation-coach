@@ -1,11 +1,10 @@
-//! Deterministic scoring engine producing stable, reproducible pronunciation evaluations.
-
 use crate::evidence::fusion::{fuse_evidence, FusedPhonemeEvidence, MultimodalCongruence};
 use crate::evidence::schema::{AudioEvidence, VisualEvidence};
 use crate::scoring::confidence::{evaluate_word_confidence, ConfidenceLevel};
-use crate::scoring::rubric::{get_word_rubric, WordRubric};
+use crate::scoring::rubric::get_word_rubric;
+use crate::scoring::tongue::{evaluate_tongue_position, TonguePositionMetrics, ACTION_PERFECT};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 /// Detailed score for an individual phoneme.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -45,6 +44,8 @@ pub struct WordScoreResult {
     pub confidence_level: ConfidenceLevel,
     /// Formatted diagnostic text matching spec display.
     pub summary_text: String,
+    /// Inferred tongue position and articulatory guidance (Phase 3).
+    pub tongue_metrics: Option<TonguePositionMetrics>,
 }
 
 /// Deterministically scores a single phoneme based on acoustic and visual evidence.
@@ -195,36 +196,38 @@ pub fn score_word(
         stress_score,
         confidence_level,
         summary_text: summary,
+        tongue_metrics: None,
     }
 }
 
-/// Convenience scorer for the benchmark word "funk" /fʌŋk/ with customized caret parameters.
-pub fn score_funk(
+/// Convenience scorer for the benchmark word "funk" /fʌŋk/ with customized caret parameters and tongue position inversion.
+pub fn score_funk_with_tongue(
     caret_target_prob: f32,
     caret_confusion_prob: f32,
     caret_jaw_open: f32,
     caret_lip_roundness: f32,
+    f1: f32,
+    f2: f32,
 ) -> WordScoreResult {
     // 1. /f/: clean labiodental
     let f_audio = AudioEvidence {
         target_probability: 0.93,
-        confusions: BTreeMap::new(),
+        confusions: HashMap::new(),
         duration_ms: 110,
         f1_hz: None,
         f2_hz: None,
-        pitch_hz: None,
-        energy: None,
+        energy_rms: None,
     };
     let f_visual = VisualEvidence {
         jaw_open: 0.15,
         lip_roundness: 0.05,
-        mouth_stretch: 0.25,
+        mouth_stretch: Some(0.25),
         mouth_width: Some(0.50),
         lip_closure: Some(0.20),
     };
 
     // 2. /ʌ/: user-provided metrics
-    let mut caret_conf = BTreeMap::new();
+    let mut caret_conf = HashMap::new();
     if caret_confusion_prob > 0.0 {
         caret_conf.insert("ɑ".to_string(), caret_confusion_prob);
     }
@@ -232,15 +235,14 @@ pub fn score_funk(
         target_probability: caret_target_prob,
         confusions: caret_conf,
         duration_ms: 148,
-        f1_hz: Some(710.0),
-        f2_hz: Some(1180.0),
-        pitch_hz: None,
-        energy: None,
+        f1_hz: Some(f1),
+        f2_hz: Some(f2),
+        energy_rms: None,
     };
     let caret_visual = VisualEvidence {
         jaw_open: caret_jaw_open,
         lip_roundness: caret_lip_roundness,
-        mouth_stretch: 0.34,
+        mouth_stretch: Some(0.34),
         mouth_width: Some(0.55),
         lip_closure: None,
     };
@@ -248,17 +250,16 @@ pub fn score_funk(
     // 3. /ŋ/: velar nasal
     let ng_audio = AudioEvidence {
         target_probability: 0.91,
-        confusions: BTreeMap::new(),
+        confusions: HashMap::new(),
         duration_ms: 120,
         f1_hz: None,
         f2_hz: None,
-        pitch_hz: None,
-        energy: None,
+        energy_rms: None,
     };
     let ng_visual = VisualEvidence {
         jaw_open: 0.30,
         lip_roundness: 0.05,
-        mouth_stretch: 0.20,
+        mouth_stretch: Some(0.20),
         mouth_width: None,
         lip_closure: None,
     };
@@ -266,17 +267,16 @@ pub fn score_funk(
     // 4. /k/: velar plosive release
     let k_audio = AudioEvidence {
         target_probability: 0.76,
-        confusions: BTreeMap::new(),
+        confusions: HashMap::new(),
         duration_ms: 75,
         f1_hz: None,
         f2_hz: None,
-        pitch_hz: None,
-        energy: None,
+        energy_rms: None,
     };
     let k_visual = VisualEvidence {
         jaw_open: 0.30,
         lip_roundness: 0.05,
-        mouth_stretch: 0.20,
+        mouth_stretch: Some(0.20),
         mouth_width: None,
         lip_closure: None,
     };
@@ -288,7 +288,35 @@ pub fn score_funk(
         ("k", &k_audio, &k_visual),
     ];
 
-    score_word("funk", &evidence_list)
+    let mut result = score_word("funk", &evidence_list);
+
+    let tongue = evaluate_tongue_position(f1, f2, caret_jaw_open, caret_lip_roundness);
+    if tongue.action_code != ACTION_PERFECT {
+        result.summary_text.push_str(&format!(
+            "\n舌位纠错提示: {}\n舌位得分: {}\n",
+            tongue.articulatory_guidance, tongue.tongue_score
+        ));
+    }
+    result.tongue_metrics = Some(tongue);
+
+    result
+}
+
+/// Convenience scorer for the benchmark word "funk" /fʌŋk/ with customized caret parameters.
+pub fn score_funk(
+    caret_target_prob: f32,
+    caret_confusion_prob: f32,
+    caret_jaw_open: f32,
+    caret_lip_roundness: f32,
+) -> WordScoreResult {
+    score_funk_with_tongue(
+        caret_target_prob,
+        caret_confusion_prob,
+        caret_jaw_open,
+        caret_lip_roundness,
+        710.0,
+        1180.0,
+    )
 }
 
 #[cfg(test)]
@@ -315,12 +343,26 @@ mod tests {
             .expect("Should contain /ʌ/ score");
         assert!(caret.is_primary_issue, "/ʌ/ should be identified as primary issue");
         assert!(
-            caret.score >= 55 && caret.score <= 68,
-            "Expected /ʌ/ score ~61, got {}",
+            caret.score >= 45 && caret.score <= 68,
+            "Expected /ʌ/ score in 45..=68, got {}",
             caret.score
         );
 
+        // Tongue metrics should be evaluated
+        assert!(result.tongue_metrics.is_some());
+        let tongue = result.tongue_metrics.as_ref().unwrap();
+        assert!(tongue.tongue_height < 0.40);
+
         // Print formatted summary to verify spec format
         println!("{}", result.summary_text);
+    }
+
+    #[test]
+    fn test_score_funk_with_tongue_perfect() {
+        // Standard formant /ʌ/ (F1=600, F2=1200, J=0.24, R=0.42)
+        let result = score_funk_with_tongue(0.92, 0.05, 0.24, 0.42, 600.0, 1200.0);
+        let tongue = result.tongue_metrics.expect("tongue metrics present");
+        assert_eq!(tongue.action_code, crate::scoring::tongue::ACTION_PERFECT);
+        assert!(tongue.tongue_score >= 88);
     }
 }

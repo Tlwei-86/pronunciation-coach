@@ -1,3 +1,6 @@
+pub mod decision_types;
+pub mod local_rule;
+
 use crate::evidence::schema::EvidenceJson;
 use serde::{Deserialize, Serialize};
 

@@ -62,7 +62,7 @@ pub fn fuse_evidence(
         visual.lip_roundness,
         visual.mouth_width.unwrap_or(0.50),
         visual.lip_closure.unwrap_or(0.0),
-        visual.mouth_stretch,
+        visual.mouth_stretch.unwrap_or(0.0),
     );
 
     let viseme_eval = evaluate_viseme(phoneme, &mouth_geom);
@@ -108,11 +108,11 @@ pub fn fuse_evidence(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
+    use std::collections::HashMap;
 
     #[test]
     fn test_fusion_caret_corroborated_deviation() {
-        let mut confusions = BTreeMap::new();
+        let mut confusions = HashMap::new();
         confusions.insert("ɑ".to_string(), 0.38);
 
         let audio = AudioEvidence {
@@ -121,14 +121,13 @@ mod tests {
             duration_ms: 150,
             f1_hz: Some(720.0),
             f2_hz: Some(1190.0),
-            pitch_hz: None,
-            energy: None,
+            energy_rms: None,
         };
 
         let visual = VisualEvidence {
             jaw_open: 0.75, // excessive jaw opening for /ʌ/
             lip_roundness: 0.08,
-            mouth_stretch: 0.30,
+            mouth_stretch: Some(0.30),
             mouth_width: Some(0.55),
             lip_closure: None,
         };
@@ -143,19 +142,18 @@ mod tests {
     fn test_fusion_velar_ignores_visual_conflict() {
         let audio = AudioEvidence {
             target_probability: 0.90,
-            confusions: BTreeMap::new(),
+            confusions: HashMap::new(),
             duration_ms: 60,
             f1_hz: None,
             f2_hz: None,
-            pitch_hz: None,
-            energy: None,
+            energy_rms: None,
         };
 
         // Even if jaw is open or closed, velar visual weight is low (0.05)
         let visual = VisualEvidence {
             jaw_open: 0.85,
             lip_roundness: 0.50,
-            mouth_stretch: 0.10,
+            mouth_stretch: Some(0.10),
             mouth_width: None,
             lip_closure: None,
         };

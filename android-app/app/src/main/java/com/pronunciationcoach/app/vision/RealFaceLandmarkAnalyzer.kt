@@ -6,6 +6,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
+import com.google.mlkit.vision.face.FaceContour
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.face.FaceLandmark
@@ -17,17 +18,19 @@ data class LiveFaceMouthMetrics(
     val lipRoundness: Float,
     val mouthWidthNormalized: Float,
     val isFaceDetected: Boolean,
-    val statusText: String
+    val statusText: String,
+    val lipContourPoints: List<android.graphics.PointF> = emptyList()
 )
 
 class RealFaceLandmarkAnalyzer(
     private val onMetricsUpdated: (LiveFaceMouthMetrics) -> Unit
 ) : ImageAnalysis.Analyzer {
 
-    // Configure Face Detector for detailed landmarks (Mouth left/right/bottom, Cheeks)
+    // Configure Face Detector for detailed landmarks (Mouth left/right/bottom, Cheeks) and Contours
     private val options = FaceDetectorOptions.Builder()
         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
         .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+        .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
         .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
         .build()
 
@@ -55,7 +58,8 @@ class RealFaceLandmarkAnalyzer(
                             lipRoundness = 0.10f,
                             mouthWidthNormalized = 0.45f,
                             isFaceDetected = false,
-                            statusText = "未检测到人脸，请正对屏幕"
+                            statusText = "未检测到人脸，请正对屏幕",
+                            lipContourPoints = emptyList()
                         )
                     )
                 } else {
@@ -78,6 +82,13 @@ class RealFaceLandmarkAnalyzer(
         val mouthLeft = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position
         val mouthRight = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
         val noseBase = face.getLandmark(FaceLandmark.NOSE_BASE)?.position
+
+        // Extract detailed 2D lip contour points
+        val lipPoints = mutableListOf<android.graphics.PointF>()
+        face.getContour(FaceContour.UPPER_LIP_TOP)?.points?.let { lipPoints.addAll(it) }
+        face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points?.let { lipPoints.addAll(it) }
+        face.getContour(FaceContour.LOWER_LIP_TOP)?.points?.let { lipPoints.addAll(it) }
+        face.getContour(FaceContour.LOWER_LIP_BOTTOM)?.points?.let { lipPoints.addAll(it) }
 
         val boundingBox = face.boundingBox
         val faceHeight = max(100f, boundingBox.height().toFloat())
@@ -106,7 +117,8 @@ class RealFaceLandmarkAnalyzer(
                 lipRoundness = roundness,
                 mouthWidthNormalized = normalizedWidth,
                 isFaceDetected = true,
-                statusText = status
+                statusText = status,
+                lipContourPoints = lipPoints
             )
         } else {
             // Face detected but landmarks partially occluded
@@ -115,7 +127,8 @@ class RealFaceLandmarkAnalyzer(
                 lipRoundness = 0.12f,
                 mouthWidthNormalized = 0.45f,
                 isFaceDetected = true,
-                statusText = "已检测到面部 (微调光线与距离)"
+                statusText = "已检测到面部 (微调光线与距离)",
+                lipContourPoints = lipPoints
             )
         }
     }

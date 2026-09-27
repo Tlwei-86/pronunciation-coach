@@ -4,7 +4,7 @@ use crate::evidence::schema::EvidenceJson;
 use crate::policy::decision_types::{
     AccuracyGrade, DeepSeekDiagnosis, DiagnosisReport, JevDecision,
 };
-use crate::scoring::scorer::{score_word, WordScoreResult};
+use crate::scoring::scorer::score_word;
 
 /// Generates a complete rule-grounded diagnosis report from Evidence JSON.
 pub fn evaluate_evidence_locally(evidence: &EvidenceJson) -> DiagnosisReport {
@@ -44,7 +44,7 @@ pub fn evaluate_evidence_locally(evidence: &EvidenceJson) -> DiagnosisReport {
         evidence.visual.jaw_open,
     ) {
         // Rule 1: /ʌ/ shifted to /ɑ/ (excessive jaw opening or acoustic confusion)
-        ("ʌ", Some("ɑ"), _) | ("ʌ", _, jaw) if jaw > 0.65 && target_score < 78 => {
+        ("ʌ", conf, jaw) if (conf == Some("ɑ") || jaw > 0.65) && target_score < 78 => {
             (
                 DeepSeekDiagnosis {
                     primary_issue: "vowel_quality".to_string(),
@@ -153,11 +153,11 @@ pub fn evaluate_evidence_locally(evidence: &EvidenceJson) -> DiagnosisReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
+    use std::collections::HashMap;
 
     #[test]
     fn test_local_diagnosis_caret_shift_to_alpha() {
-        let mut conf = BTreeMap::new();
+        let mut conf = HashMap::new();
         conf.insert("ɑ".to_string(), 0.31);
         conf.insert("ə".to_string(), 0.07);
 
@@ -170,13 +170,12 @@ mod tests {
                 duration_ms: 148,
                 f1_hz: Some(710.0),
                 f2_hz: Some(1180.0),
-                pitch_hz: None,
-                energy: None,
+                energy_rms: None,
             },
             visual: crate::evidence::schema::VisualEvidence {
                 jaw_open: 0.71,
                 lip_roundness: 0.08,
-                mouth_stretch: 0.34,
+                mouth_stretch: Some(0.34),
                 mouth_width: Some(0.59),
                 lip_closure: None,
             },

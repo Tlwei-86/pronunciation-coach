@@ -1,3 +1,13 @@
+pub mod confidence;
+pub mod rubric;
+pub mod scorer;
+pub mod tongue;
+
+pub use confidence::*;
+pub use rubric::*;
+pub use scorer::*;
+pub use tongue::*;
+
 use crate::evidence::schema::EvidenceJson;
 use crate::vision::get_visual_weight_for_phoneme;
 use serde::{Deserialize, Serialize};

@@ -1,3 +1,9 @@
+pub mod mouth_geometry;
+pub mod viseme;
+
+pub use mouth_geometry::*;
+pub use viseme::*;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

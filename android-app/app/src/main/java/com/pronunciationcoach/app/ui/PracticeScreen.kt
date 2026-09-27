@@ -28,11 +28,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.pronunciationcoach.app.R
+import com.pronunciationcoach.app.audio.TongueEstimator
+import com.pronunciationcoach.app.audio.TongueEvaluation
 import com.pronunciationcoach.app.core.AcousticFeatureExtractor
 import com.pronunciationcoach.app.core.PronunciationCoreBridge
 import com.pronunciationcoach.app.core.TestArtifactPipeline
 import com.pronunciationcoach.app.core.OnnxAcousticEngine
 import com.pronunciationcoach.app.domain.MicrophoneAudioSource
+import com.pronunciationcoach.app.ui.components.MouthTrackingOverlay
 import com.pronunciationcoach.app.vision.LiveFaceMouthMetrics
 import com.pronunciationcoach.app.vision.RealFaceLandmarkAnalyzer
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +53,7 @@ fun PracticeScreen() {
 
     var rawResultJson by remember { mutableStateOf<String?>(null) }
     var currentTestMode by remember { mutableStateOf("Ready") }
+    var currentTongueEval by remember { mutableStateOf<TongueEvaluation?>(null) }
 
     // Live Visual Mouth Tracking Metrics
     var liveMouthMetrics by remember {
@@ -178,6 +182,12 @@ fun PracticeScreen() {
                         )
                     }
 
+                    // Compose Dynamic Mouth Tracking HUD Overlay (Mesh, Reticle, Caliper)
+                    MouthTrackingOverlay(
+                        metrics = liveMouthMetrics,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
                     // Live Vision HUD Metrics Bar
                     Box(
                         modifier = Modifier
@@ -237,13 +247,22 @@ fun PracticeScreen() {
                                     val currentJaw = liveMouthMetrics.jawOpen
                                     val currentRoundness = liveMouthMetrics.lipRoundness
 
-                                    rawResultJson = PronunciationCoreBridge.safeScoreFunk(
-                                        neuralResult.targetProb,
-                                        neuralResult.confusionProb,
+                                    val tongueEval = TongueEstimator.evaluate(
+                                        sample.pcmData,
                                         currentJaw,
                                         currentRoundness
                                     )
-                                    currentTestMode = "Live: ${neuralResult.dominantPhoneme} [Jaw: ${(currentJaw * 100).toInt()}%]"
+                                    currentTongueEval = tongueEval
+
+                                    rawResultJson = PronunciationCoreBridge.safeScoreFunkWithTongue(
+                                        neuralResult.targetProb,
+                                        neuralResult.confusionProb,
+                                        currentJaw,
+                                        currentRoundness,
+                                        tongueEval.height,
+                                        tongueEval.backness
+                                    )
+                                    currentTestMode = "Live: ${neuralResult.dominantPhoneme} [Jaw: ${(currentJaw * 100).toInt()}% | Tongue: ${(tongueEval.height * 100).toInt()}%]"
                                 }
                             }
                         },
@@ -254,7 +273,7 @@ fun PracticeScreen() {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            if (isLiveRecording) "⏹ 停止录音并评测" else "🎙 按下开始实时录音评测",
+                            if (isLiveRecording) "⏹ 停止录音并测评" else "🎙 按下开始实时录音测评",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -274,7 +293,7 @@ fun PracticeScreen() {
                 ) {
                     Text("🧪 物理测试文件真实端到端推理", color = Color(0xFF64B5F6), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Spacer(Modifier.height(4.dp))
-                    Text("ONNX Runtime 声学神经网络 + ML Kit 视觉神经网络 (真双模型推理)", color = Color(0xFF81C784), fontSize = 11.sp)
+                    Text("ONNX Runtime 声学神经网络 + ML Kit 视觉神经网络 + 声学反演舌位", color = Color(0xFF81C784), fontSize = 11.sp)
                     Spacer(Modifier.height(10.dp))
 
                     // Row 1: Good Golden Test
@@ -287,11 +306,17 @@ fun PracticeScreen() {
                                 val vision = TestArtifactPipeline.analyzeTestImageFromAssets(
                                     context, "test_images/face_standard_caret.jpg"
                                 )
-                                rawResultJson = PronunciationCoreBridge.safeScoreFunk(
+                                liveMouthMetrics = vision
+                                val tongueEval = TongueEstimator.evaluate(pcm, vision.jawOpen, vision.lipRoundness)
+                                currentTongueEval = tongueEval
+
+                                rawResultJson = PronunciationCoreBridge.safeScoreFunkWithTongue(
                                     acousticNeural.targetProb,
                                     acousticNeural.confusionProb,
                                     vision.jawOpen,
-                                    vision.lipRoundness
+                                    vision.lipRoundness,
+                                    tongueEval.height,
+                                    tongueEval.backness
                                 )
                             }
                         },
@@ -314,11 +339,17 @@ fun PracticeScreen() {
                                 val vision = TestArtifactPipeline.analyzeTestImageFromAssets(
                                     context, "test_images/face_wide_open_ah.jpg"
                                 )
-                                rawResultJson = PronunciationCoreBridge.safeScoreFunk(
+                                liveMouthMetrics = vision
+                                val tongueEval = TongueEstimator.evaluate(pcm, vision.jawOpen, vision.lipRoundness)
+                                currentTongueEval = tongueEval
+
+                                rawResultJson = PronunciationCoreBridge.safeScoreFunkWithTongue(
                                     acousticNeural.targetProb,
                                     acousticNeural.confusionProb,
                                     vision.jawOpen,
-                                    vision.lipRoundness
+                                    vision.lipRoundness,
+                                    tongueEval.height,
+                                    tongueEval.backness
                                 )
                             }
                         },
@@ -341,11 +372,17 @@ fun PracticeScreen() {
                                 val vision = TestArtifactPipeline.analyzeTestImageFromAssets(
                                     context, "test_images/face_closed_mouth.jpg"
                                 )
-                                rawResultJson = PronunciationCoreBridge.safeScoreFunk(
+                                liveMouthMetrics = vision
+                                val tongueEval = TongueEstimator.evaluate(pcm, vision.jawOpen, vision.lipRoundness)
+                                currentTongueEval = tongueEval
+
+                                rawResultJson = PronunciationCoreBridge.safeScoreFunkWithTongue(
                                     acousticNeural.targetProb,
                                     acousticNeural.confusionProb,
                                     vision.jawOpen,
-                                    vision.lipRoundness
+                                    vision.lipRoundness,
+                                    tongueEval.height,
+                                    tongueEval.backness
                                 )
                             }
                         },
@@ -428,6 +465,79 @@ fun PracticeScreen() {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    // Articulatory Tongue Position Card
+                    currentTongueEval?.let { tEval ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1B2333))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "👅 声学反演舌位分析 (Tongue Inversion)",
+                                        color = Color(0xFF80D8FF),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (tEval.score >= 80) Color(0xFF1B5E20) else Color(0xFFB71C1C)
+                                    ) {
+                                        Text(
+                                            "得分 ${tEval.score}",
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceAround
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("舌位高度 (Height)", color = Color.Gray, fontSize = 11.sp)
+                                        Text(
+                                            "${(tEval.height * 100).toInt()}%",
+                                            color = if (tEval.height in 0.40f..0.70f) Color(0xFF00E676) else Color(0xFFFF5252),
+                                            fontSize = 20.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text("标准区间: 45% - 65%", color = Color.Gray, fontSize = 10.sp)
+                                    }
+
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("舌位前后 (Backness)", color = Color.Gray, fontSize = 11.sp)
+                                        Text(
+                                            "${(tEval.backness * 100).toInt()}%",
+                                            color = if (tEval.backness in 0.35f..0.60f) Color(0xFF00E676) else Color(0xFFFFD54F),
+                                            fontSize = 20.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text("标准区间: 38% - 58%", color = Color.Gray, fontSize = 10.sp)
+                                    }
+                                }
+
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    "🗣️ 舌位发音诊断: ${tEval.guidance}",
+                                    color = Color(0xFFE0E0E0),
+                                    fontSize = 13.sp,
+                                    lineHeight = 18.sp
+                                )
                             }
                         }
                     }
