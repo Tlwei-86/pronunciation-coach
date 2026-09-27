@@ -1,0 +1,13 @@
+{
+  "target_word": "sheep",
+  "overall_score": 93.0,
+  "phoneme_scores": {
+    "ʃ": 93.0,
+    "iː": 94.0,
+    "p": 92.0
+  },
+  "acoustic_score": 93.0,
+  "visual_score": 95.0,
+  "confidence": "high",
+  "error_category": "none"
+}

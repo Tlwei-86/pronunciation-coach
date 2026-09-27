@@ -1,0 +1,16 @@
+{
+  "target_word": "funk",
+  "overall_score": 92.0,
+  "phoneme_scores": {
+    "f": 94.0,
+    "ʌ": 92.0,
+    "ŋ": 91.0,
+    "k": 90.0
+  },
+  "acoustic_score": 91.0,
+  "visual_score": 93.0,
+  "rhythm_score": 94.0,
+  "stress_score": 95.0,
+  "confidence": "high",
+  "error_category": "none"
+}

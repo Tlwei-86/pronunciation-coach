@@ -1,0 +1,13 @@
+{
+  "target_word": "ship",
+  "overall_score": 91.0,
+  "phoneme_scores": {
+    "ʃ": 92.0,
+    "ɪ": 91.0,
+    "p": 90.0
+  },
+  "acoustic_score": 90.0,
+  "visual_score": 92.0,
+  "confidence": "high",
+  "error_category": "none"
+}

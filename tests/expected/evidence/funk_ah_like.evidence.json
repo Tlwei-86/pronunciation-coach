@@ -1,0 +1,23 @@
+{
+  "target_word": "funk",
+  "target_phoneme": "ʌ",
+  "audio": {
+    "target_probability": 0.41,
+    "confusions": {
+      "ɑ": 0.52,
+      "ə": 0.05
+    },
+    "duration_ms": 195,
+    "f1_hz": 780,
+    "f2_hz": 1150
+  },
+  "visual": {
+    "jaw_open": 0.72,
+    "lip_roundness": 0.08,
+    "mouth_stretch": 0.38
+  },
+  "context": {
+    "previous_attempt_score": 62,
+    "attempt_index": 2
+  }
+}

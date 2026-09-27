@@ -1,0 +1,17 @@
+{
+  "target_word": "funk",
+  "overall_score": 64.0,
+  "phoneme_scores": {
+    "f": 92.0,
+    "ʌ": 90.0,
+    "ŋ": 88.0,
+    "k": 25.0
+  },
+  "acoustic_score": 61.0,
+  "visual_score": 85.0,
+  "rhythm_score": 72.0,
+  "stress_score": 80.0,
+  "confidence": "high",
+  "error_category": "coda_deletion",
+  "diagnosis": "Final plosive /k/ was omitted. Release back of tongue from soft palate."
+}

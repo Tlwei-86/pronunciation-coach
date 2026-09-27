@@ -1,0 +1,13 @@
+{
+  "target_word": "thin",
+  "overall_score": 90.0,
+  "phoneme_scores": {
+    "θ": 89.0,
+    "ɪ": 91.0,
+    "n": 90.0
+  },
+  "acoustic_score": 88.0,
+  "visual_score": 94.0,
+  "confidence": "high",
+  "error_category": "none"
+}

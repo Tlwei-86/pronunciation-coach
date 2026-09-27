@@ -1,0 +1,23 @@
+{
+  "target_word": "ship",
+  "target_phoneme": "ɪ",
+  "audio": {
+    "target_probability": 0.89,
+    "confusions": {
+      "iː": 0.07,
+      "ɛ": 0.02
+    },
+    "duration_ms": 110,
+    "f1_hz": 430,
+    "f2_hz": 1950
+  },
+  "visual": {
+    "jaw_open": 0.32,
+    "lip_roundness": 0.05,
+    "mouth_stretch": 0.42
+  },
+  "context": {
+    "previous_attempt_score": 80,
+    "attempt_index": 1
+  }
+}

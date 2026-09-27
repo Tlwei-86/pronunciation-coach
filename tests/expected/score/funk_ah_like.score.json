@@ -1,0 +1,17 @@
+{
+  "target_word": "funk",
+  "overall_score": 67.0,
+  "phoneme_scores": {
+    "f": 93.0,
+    "ʌ": 52.0,
+    "ŋ": 88.0,
+    "k": 85.0
+  },
+  "acoustic_score": 64.0,
+  "visual_score": 70.0,
+  "rhythm_score": 85.0,
+  "stress_score": 88.0,
+  "confidence": "high",
+  "error_category": "vowel_distortion",
+  "diagnosis": "Vowel /ʌ/ pronounced too open, leaning towards /ɑ/. Close jaw slightly."
+}

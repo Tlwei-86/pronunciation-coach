@@ -1,0 +1,13 @@
+{
+  "target_word": "sin",
+  "overall_score": 92.0,
+  "phoneme_scores": {
+    "s": 93.0,
+    "ɪ": 92.0,
+    "n": 91.0
+  },
+  "acoustic_score": 92.0,
+  "visual_score": 92.0,
+  "confidence": "high",
+  "error_category": "none"
+}
