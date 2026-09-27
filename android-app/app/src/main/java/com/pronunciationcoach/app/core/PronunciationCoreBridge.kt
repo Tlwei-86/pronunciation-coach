@@ -1,6 +1,5 @@
 package com.pronunciationcoach.app.core
 
-import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -15,9 +14,9 @@ object PronunciationCoreBridge {
         try {
             System.loadLibrary("pronunciation_core")
             isLibraryLoaded = true
-            Log.i(TAG, "Successfully loaded libpronunciation_core.so")
+            println("[$TAG] Successfully loaded libpronunciation_core.so")
         } catch (e: UnsatisfiedLinkError) {
-            Log.w(TAG, "Native library libpronunciation_core.so not found, fallback enabled: \${e.message}")
+            println("[$TAG] Native library libpronunciation_core.so not found, fallback enabled: ${e.message}")
             isLibraryLoaded = false
         }
     }
@@ -76,12 +75,15 @@ object PronunciationCoreBridge {
         val phonemes = JSONArray().apply {
             put(JSONObject().apply {
                 put("symbol", "f")
+                put("phoneme", "f")
                 put("ipa", "/f/")
                 put("score", 94)
                 put("status", "GOOD")
             })
             put(JSONObject().apply {
                 put("symbol", "ʌ")
+                put("phoneme", "ʌ")
+                put("is_primary_issue", !isGood)
                 put("ipa", "/ʌ/")
                 put("score", if (isGood) 90 else 45)
                 put("status", if (isGood) "GOOD" else "WARNING")
@@ -92,12 +94,14 @@ object PronunciationCoreBridge {
             })
             put(JSONObject().apply {
                 put("symbol", "ŋ")
+                put("phoneme", "ŋ")
                 put("ipa", "/ŋ/")
                 put("score", 91)
                 put("status", "GOOD")
             })
             put(JSONObject().apply {
                 put("symbol", "k")
+                put("phoneme", "k")
                 put("ipa", "/k/")
                 put("score", 88)
                 put("status", "GOOD")
@@ -110,6 +114,8 @@ object PronunciationCoreBridge {
             put("targetIpa", "/fʌŋk/")
             put("overallScore", overall)
             put("overall_score", overall)
+            put("acoustic_accuracy", (targetProb * 100).toInt())
+            put("visual_accuracy", ((1.0f - jawOpen) * 100).toInt())
             put("acousticScore", (targetProb * 100).toInt())
             put("acoustic_score", (targetProb * 100).toInt())
             put("visualScore", ((1.0f - jawOpen) * 100).toInt())
@@ -129,8 +135,8 @@ object PronunciationCoreBridge {
 
     private fun fallbackAnalyzeEvidence(evidenceJson: String): String {
         val obj = try { JSONObject(evidenceJson) } catch (e: Exception) { JSONObject() }
-        val acoustic = obj.optJSONObject("acoustic")
-        val visual = obj.optJSONObject("visual")
+        val acoustic = obj.optJSONObject("acoustic") ?: obj.optJSONObject("acousticFeatures")
+        val visual = obj.optJSONObject("visual") ?: obj.optJSONObject("visualFeatures")
         val targetProb = acoustic?.optDouble("targetPhonemeProb", 0.85)?.toFloat() ?: 0.85f
         val confusionProb = acoustic?.optDouble("confusionPhonemeProb", 0.15)?.toFloat() ?: 0.15f
         val jawOpen = visual?.optDouble("jawOpen", 0.38)?.toFloat() ?: 0.38f

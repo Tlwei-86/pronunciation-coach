@@ -120,7 +120,7 @@ fun PracticeScreen() {
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF222233))
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Assessment: \$currentTestMode", color = Color.Gray, fontSize = 12.sp)
+                            Text("Assessment: $currentTestMode", color = Color.Gray, fontSize = 12.sp)
                             Spacer(Modifier.height(8.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -129,10 +129,10 @@ fun PracticeScreen() {
                             ) {
                                 Column {
                                     Text("Overall Score", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                    Text("Acoustic: \$acoustic | Visual: \$visual", color = Color.LightGray, fontSize = 13.sp)
+                                    Text("Acoustic: $acoustic | Visual: $visual", color = Color.LightGray, fontSize = 13.sp)
                                 }
                                 Text(
-                                    "\$overall",
+                                    "$overall",
                                     fontSize = 42.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (overall >= 80) Color(0xFF4CAF50) else Color(0xFFFFB300)
