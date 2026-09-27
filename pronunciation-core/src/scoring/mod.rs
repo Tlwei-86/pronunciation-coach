@@ -158,9 +158,7 @@ impl DeterministicScorer {
         let v_total: u32 = phonemes.iter().map(|p| p.visual_score).sum();
 
         let mut guidance = Vec::new();
-        let next_exercise;
-
-        if score_uh.is_primary_issue || score_uh.score < 80 {
+        let next_exercise = if score_uh.is_primary_issue || score_uh.score < 80 {
             if jaw_open > 0.65 {
                 guidance.push("Reduce jaw opening slightly: keep your mouth more relaxed, not wide open like /ɑ/.".to_string());
             } else {
@@ -170,14 +168,14 @@ impl DeterministicScorer {
             }
             guidance
                 .push("Practice /ʌ/ alone before returning to the full word 'funk'.".to_string());
-            next_exercise = "minimal_pair_ʌ_ɑ".to_string();
+            "minimal_pair_ʌ_ɑ".to_string()
         } else {
             guidance.push(
                 "Great job! Your /ʌ/ vowel and ending consonant /k/ are distinct and accurate."
                     .to_string(),
             );
-            next_exercise = "sentence_rhythm_funk".to_string();
-        }
+            "sentence_rhythm_funk".to_string()
+        };
 
         PronunciationReport {
             target_word: "funk".to_string(),
