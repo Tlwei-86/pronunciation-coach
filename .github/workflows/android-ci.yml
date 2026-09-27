@@ -82,6 +82,7 @@ jobs:
       - name: Build Debug APK & Run Unit Tests
         working-directory: android-app
         run: |
+          sed -i 's/\r$//' gradlew || true
           chmod +x gradlew || true
           ./gradlew testDebugUnitTest assembleDebug --stacktrace
 
