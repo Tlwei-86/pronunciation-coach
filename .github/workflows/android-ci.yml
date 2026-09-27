@@ -28,17 +28,18 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android, x86_64-linux-android
+          targets: aarch64-linux-android
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
 
-      - name: Build Rust Core for Android (arm64-v8a & x86_64)
+      - name: Build Rust Core for Android (arm64-v8a with 16KB page alignment)
         working-directory: pronunciation-core
+        env:
+          RUSTFLAGS: "-C link-arg=-Wl,-z,max-page-size=16384"
         run: |
           mkdir -p ../android-app/app/src/main/jniLibs/arm64-v8a
-          mkdir -p ../android-app/app/src/main/jniLibs/x86_64
-          cargo ndk -t arm64-v8a -t x86_64 -o ../android-app/app/src/main/jniLibs build --release
+          cargo ndk -t arm64-v8a -o ../android-app/app/src/main/jniLibs build --release
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
