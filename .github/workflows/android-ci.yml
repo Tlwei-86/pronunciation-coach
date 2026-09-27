@@ -94,23 +94,19 @@ jobs:
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
 
-      # 自动化更新部署 (仅在 main 分支 push 成功后自动发布到 GitHub Release)
+      # 自动化更新部署 (构建完成后发布/更新 GitHub Release)
       - name: Deploy Update to GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          cat << 'EOF' > release_notes.md
-          ### 🚀 Automated Update Deployment
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.0-preview
+          name: Pronunciation Coach Preview (Latest Build)
+          body: |
+            ### 🚀 Automated Update Deployment
 
-          - **Target Device**: OnePlus 8 / Android 8.0+ (ARM64 16KB Page Compatible)
-          - **Engine Components**: JNI Rust core `libpronunciation_core.so`, ONNX Runtime Mobile, CameraX & ML Kit Face Tracking.
+            - **Target Device**: OnePlus 8 / Android 8.0+ (ARM64 16KB Page Compatible)
+            - **Engine Components**: JNI Rust core `libpronunciation_core.so`, ONNX Runtime Mobile, CameraX & ML Kit Face Tracking.
 
-          #### 📲 Installation:
-          Download **`app-debug.apk`** below to install/update directly on your device.
-          EOF
-
-          gh release create "v0.1.0-preview" android-app/app/build/outputs/apk/debug/app-debug.apk \
-            --title "Pronunciation Coach Preview (Latest Build)" \
-            --notes-file release_notes.md \
-            --clobber
+            #### 📲 Installation:
+            Download **`app-debug.apk`** below to install/update directly on your device.
+          files: android-app/app/build/outputs/apk/debug/app-debug.apk
