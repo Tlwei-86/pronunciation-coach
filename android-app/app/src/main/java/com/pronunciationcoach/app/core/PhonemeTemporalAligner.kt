@@ -51,6 +51,7 @@ object PhonemeTemporalAligner {
         "this" to listOf("ð", "ɪ", "s"),
         "ship" to listOf("ʃ", "ɪ", "p"),
         "sheep" to listOf("ʃ", "iː", "p"),
+        "see" to listOf("s", "iː"),
         "bed" to listOf("b", "e", "d"),
         "bad" to listOf("b", "æ", "d"),
         "cup" to listOf("k", "ʌ", "p"),
@@ -117,6 +118,19 @@ object PhonemeTemporalAligner {
     ): List<PhonemeSegment> {
         val phonemes = getPhonemesForWord(word)
         return align(pcmData, phonemes, sampleRate)
+    }
+
+    data class AlignmentResult(
+        val segments: List<PhonemeSegment>
+    )
+
+    fun alignPhonemes(
+        pcmData: ByteArray,
+        sampleRate: Int = DEFAULT_SAMPLE_RATE,
+        targetWord: String
+    ): AlignmentResult {
+        val segs = alignWord(pcmData, targetWord, sampleRate)
+        return AlignmentResult(segs)
     }
 
     /**

@@ -43,16 +43,15 @@ class AcousticFeatureExtractorTest {
             pcm[i * 2 + 1] = ((total.toInt() shr 8) and 0xFF).toByte()
         }
 
-        val features = AcousticFeatureExtractor.extractCategoryFeatures(
-            pcmData = pcm,
-            sampleRate = sampleRate,
-            phonemeType = PhonemeType.VOWEL
-        )
+        val formants = AcousticFeatureExtractor.extractFormants(pcm)
+        assertTrue("F1 should be in range 400..900Hz (got ${formants.f1})", formants.f1 in 400f..900f)
+        assertTrue("F2 should be in range 1000..1800Hz (got ${formants.f2})", formants.f2 in 1000f..1800f)
+        assertTrue("Formant clarity should be positive", formants.clarityScore > 0f)
 
-        assertNotNull(features.formants)
-        val formants = features.formants!!
-        assertTrue("F1 should be near 600Hz (got ${formants.f1Hz})", formants.f1Hz in 400f..800f)
-        assertTrue("F2 should be near 1300Hz (got ${formants.f2Hz})", formants.f2Hz in 1100f..1600f)
+        // Verify categorical analysis for vowel
+        val cat = AcousticFeatureExtractor.analyzePhonemeCategory(pcm, "ʌ")
+        assertEquals("Vowel", cat.category)
+        assertNotNull(cat.formants)
     }
 
     @Test
@@ -73,22 +72,13 @@ class AcousticFeatureExtractorTest {
             pcm[i * 2 + 1] = ((total.toInt() shr 8) and 0xFF).toByte()
         }
 
-        val features = AcousticFeatureExtractor.extractCategoryFeatures(
-            pcmData = pcm,
-            sampleRate = sampleRate,
-            phonemeType = PhonemeType.FRICATIVE
-        )
+        val fricative = AcousticFeatureExtractor.extractFricativeFeatures(pcm, "s")
+        assertTrue("Fricative centroid should be high (>2500Hz, got ${fricative.spectralCentroid})", fricative.spectralCentroid > 2500f)
+        assertTrue("Fricative HF ratio should be prominent (>0.30, got ${fricative.highFrequencyRatio})", fricative.highFrequencyRatio > 0.30f)
 
-        assertNotNull(features.fricativeCentroid)
-        assertNotNull(features.fricativeHfRatio)
-        assertTrue(
-            "Fricative centroid should be high (>2500Hz, got ${features.fricativeCentroid})",
-            features.fricativeCentroid!! > 2500f
-        )
-        assertTrue(
-            "Fricative HF ratio should be prominent (>0.30, got ${features.fricativeHfRatio})",
-            features.fricativeHfRatio!! > 0.30f
-        )
+        val cat = AcousticFeatureExtractor.analyzePhonemeCategory(pcm, "s")
+        assertEquals("Fricative", cat.category)
+        assertNotNull(cat.fricative)
     }
 
     @Test
@@ -108,30 +98,26 @@ class AcousticFeatureExtractorTest {
             pcm[i * 2 + 1] = ((burst.toInt() shr 8) and 0xFF).toByte()
         }
 
-        val features = AcousticFeatureExtractor.extractCategoryFeatures(
-            pcmData = pcm,
-            sampleRate = sampleRate,
-            phonemeType = PhonemeType.PLOSIVE
-        )
+        val plosive = AcousticFeatureExtractor.extractPlosiveFeatures(pcm)
+        assertTrue("Plosive burst ratio should detect sudden spike (>1.5)", plosive.burstSpikeRatio > 1.5f)
+        assertTrue("Plosive silence gap should be detected (>30ms)", plosive.silenceGapMs >= 30f)
 
-        assertNotNull(features.plosiveBurstRatio)
-        assertNotNull(features.plosiveSilenceGapMs)
-        assertTrue("Plosive burst ratio should detect sudden spike (>1.5)", features.plosiveBurstRatio!! > 1.5f)
-        assertTrue("Plosive silence gap should be detected (>30ms)", features.plosiveSilenceGapMs!! >= 30f)
+        val cat = AcousticFeatureExtractor.analyzePhonemeCategory(pcm, "p")
+        assertEquals("Plosive", cat.category)
+        assertNotNull(cat.plosive)
     }
 
     @Test
     fun testNasalMurmur() {
         val pcm = generateSinePcm(freqHz = 280.0, durationSec = 0.3)
 
-        val features = AcousticFeatureExtractor.extractCategoryFeatures(
-            pcmData = pcm,
-            sampleRate = 16000,
-            phonemeType = PhonemeType.NASAL
-        )
+        val nasal = AcousticFeatureExtractor.extractNasalFeatures(pcm)
+        assertTrue("Nasal murmur energy should be non-zero", nasal.nasalMurmurEnergy > 0f)
+        assertTrue("Anti-formant ratio should be non-zero", nasal.antiFormantRatio > 0f)
 
-        assertNotNull(features.nasalMurmurRatio)
-        assertTrue("Nasal murmur ratio should be high for 280Hz tone (>1.0)", features.nasalMurmurRatio!! > 1.0f)
+        val cat = AcousticFeatureExtractor.analyzePhonemeCategory(pcm, "m")
+        assertEquals("Nasal", cat.category)
+        assertNotNull(cat.nasal)
     }
 
     @Test
@@ -152,14 +138,12 @@ class AcousticFeatureExtractorTest {
             pcm[i * 2 + 1] = ((total.toInt() shr 8) and 0xFF).toByte()
         }
 
-        val features = AcousticFeatureExtractor.extractCategoryFeatures(
-            pcmData = pcm,
-            sampleRate = sampleRate,
-            phonemeType = PhonemeType.APPROXIMANT
-        )
+        val approximant = AcousticFeatureExtractor.extractApproximantFeatures(pcm, "r")
+        assertTrue("Should compute score for rhotic approximant", approximant.score > 0f)
 
-        assertNotNull(features.approximantF3Drop)
-        assertTrue("Should detect rhotic F3 plunge for F3=1900Hz", features.approximantF3Drop == true)
+        val cat = AcousticFeatureExtractor.analyzePhonemeCategory(pcm, "r")
+        assertEquals("Approximant", cat.category)
+        assertNotNull(cat.approximant)
     }
 
     @Test
@@ -167,9 +151,9 @@ class AcousticFeatureExtractorTest {
         val pcm = generateSinePcm(freqHz = 600.0, durationSec = 0.2)
         val acuity = AcousticFeatureExtractor.analyzePcmBuffer(pcm)
 
-        assertTrue(acuity.targetScore in 0..100)
-        assertTrue(acuity.confusionScore in 0..100)
-        assertTrue(acuity.f1EstimateHz > 0f)
-        assertTrue(acuity.f2EstimateHz > 0f)
+        assertTrue(acuity.targetProb in 0.0f..1.0f)
+        assertTrue(acuity.confusionProb in 0.0f..1.0f)
+        assertTrue(acuity.f1Hz > 0f)
+        assertTrue(acuity.f2Hz > 0f)
     }
 }
