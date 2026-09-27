@@ -29,9 +29,14 @@ class PracticeViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private fun createViewModel() = PracticeViewModel(
+        localProvider = LocalRuleProvider(),
+        coroutineDispatcher = testDispatcher
+    )
+
     @Test
     fun testInitialState() = runTest(testDispatcher) {
-        val viewModel = PracticeViewModel(localProvider = LocalRuleProvider())
+        val viewModel = createViewModel()
         testScheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -45,7 +50,7 @@ class PracticeViewModelTest {
 
     @Test
     fun testSelectPracticeWord() = runTest(testDispatcher) {
-        val viewModel = PracticeViewModel(localProvider = LocalRuleProvider())
+        val viewModel = createViewModel()
         testScheduler.advanceUntilIdle()
 
         val sheep = DEFAULT_PRACTICE_WORDS.find { it.word == "sheep" }
@@ -61,7 +66,7 @@ class PracticeViewModelTest {
 
     @Test
     fun testSetCustomWord() = runTest(testDispatcher) {
-        val viewModel = PracticeViewModel(localProvider = LocalRuleProvider())
+        val viewModel = createViewModel()
         testScheduler.advanceUntilIdle()
 
         viewModel.setCustomWord("voice")
@@ -73,7 +78,7 @@ class PracticeViewModelTest {
 
     @Test
     fun testSelectPhoneme() = runTest(testDispatcher) {
-        val viewModel = PracticeViewModel(localProvider = LocalRuleProvider())
+        val viewModel = createViewModel()
         testScheduler.advanceUntilIdle()
 
         viewModel.selectPhoneme("θ")
@@ -85,7 +90,7 @@ class PracticeViewModelTest {
 
     @Test
     fun testUpdateFaceMetrics() = runTest(testDispatcher) {
-        val viewModel = PracticeViewModel(localProvider = LocalRuleProvider())
+        val viewModel = createViewModel()
         testScheduler.advanceUntilIdle()
 
         viewModel.updateFaceMetrics(jawOpen = 0.42f, lipRoundness = 0.20f, isFaceDetected = true)
@@ -98,7 +103,7 @@ class PracticeViewModelTest {
 
     @Test
     fun testRunCanonicalTestWav() = runTest(testDispatcher) {
-        val viewModel = PracticeViewModel(localProvider = LocalRuleProvider())
+        val viewModel = createViewModel()
         testScheduler.advanceUntilIdle()
 
         viewModel.runCanonicalTestWav()
@@ -117,7 +122,7 @@ class PracticeViewModelTest {
 
     @Test
     fun testRunConfusedTestWav() = runTest(testDispatcher) {
-        val viewModel = PracticeViewModel(localProvider = LocalRuleProvider())
+        val viewModel = createViewModel()
         testScheduler.advanceUntilIdle()
 
         viewModel.runConfusedTestWav()
@@ -161,7 +166,7 @@ class PracticeViewModelTest {
 
     @Test
     fun testSelectProvider() = runTest(testDispatcher) {
-        val viewModel = PracticeViewModel(localProvider = LocalRuleProvider())
+        val viewModel = createViewModel()
         viewModel.selectProvider(1)
         assertEquals(1, viewModel.uiState.value.selectedProviderIndex)
     }

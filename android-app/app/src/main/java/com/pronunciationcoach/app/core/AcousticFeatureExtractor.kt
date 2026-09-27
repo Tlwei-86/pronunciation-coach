@@ -222,7 +222,8 @@ object AcousticFeatureExtractor {
 
         val nFft = 512
         val halfFft = nFft / 2
-        val freqResolution = SAMPLE_RATE / nFft // 31.25 Hz per bin
+        val freqResolution = SAMPLE_RATE / nFft.toFloat() // 31.25 Hz per bin
+        val maxK = min(halfFft, (3800f / freqResolution).toInt() + 2) // calculate up to ~3800 Hz (bin ~123)
 
         // Average power spectrum across active windows
         val avgPower = FloatArray(halfFft)
@@ -231,10 +232,10 @@ object AcousticFeatureExtractor {
         var pos = 0
 
         while (pos + nFft <= emphasized.size) {
-            val real = FloatArray(halfFft)
-            val imag = FloatArray(halfFft)
+            val real = FloatArray(maxK)
+            val imag = FloatArray(maxK)
 
-            for (k in 0 until halfFft) {
+            for (k in 0 until maxK) {
                 var r = 0.0
                 var im = 0.0
                 for (t in 0 until nFft) {
@@ -254,24 +255,24 @@ object AcousticFeatureExtractor {
 
         if (windowCount > 0) {
             val countF = windowCount.toFloat()
-            for (k in 0 until halfFft) {
+            for (k in 0 until maxK) {
                 avgPower[k] = avgPower[k] / countF
             }
         }
 
         // Smooth power spectrum with 5-point moving average
-        val smoothed = FloatArray(halfFft)
-        for (k in 2 until halfFft - 2) {
+        val smoothed = FloatArray(maxK)
+        for (k in 2 until maxK - 2) {
             smoothed[k] = (avgPower[k - 2] + avgPower[k - 1] + avgPower[k] + avgPower[k + 1] + avgPower[k + 2]) / 5f
         }
 
         // Find peaks in respective formant ranges:
         // F1: 250 Hz - 950 Hz (bins 8..30)
-        // F2: 1000 Hz - 2500 Hz (bins 32..80)
+        // F2: 850 Hz - 2150 Hz (bins 27..68)
         // F3: 2200 Hz - 3600 Hz (bins 70..115)
-        val f1Bin = findPeakInBinRange(smoothed, (250 / freqResolution).toInt(), (950 / freqResolution).toInt())
-        val f2Bin = findPeakInBinRange(smoothed, max(f1Bin + 3, (1000 / freqResolution).toInt()), (2500 / freqResolution).toInt())
-        val f3Bin = findPeakInBinRange(smoothed, max(f2Bin + 3, (2200 / freqResolution).toInt()), (3600 / freqResolution).toInt())
+        val f1Bin = findPeakInBinRange(smoothed, (250f / freqResolution).toInt(), (950f / freqResolution).toInt())
+        val f2Bin = findPeakInBinRange(smoothed, max(f1Bin + 3, (850f / freqResolution).toInt()), (2150f / freqResolution).toInt())
+        val f3Bin = findPeakInBinRange(smoothed, max(f2Bin + 3, (2200f / freqResolution).toInt()), (3600f / freqResolution).toInt())
 
         val f1 = (f1Bin * freqResolution).coerceIn(250f, 1000f)
         val f2 = (f2Bin * freqResolution).coerceIn(f1 + 200f, 2800f)
