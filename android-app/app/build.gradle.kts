@@ -66,6 +66,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.face.detection)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
     
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -85,6 +85,7 @@ fun PracticeScreen() {
     }
 
     val micAudioSource = remember { MicrophoneAudioSource() }
+    val onnxEngine = remember { OnnxAcousticEngine(context) }
     var isLiveRecording by remember { mutableStateOf(false) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
@@ -229,19 +230,19 @@ fun PracticeScreen() {
                                 isLiveRecording = false
                                 coroutineScope.launch {
                                     val sample = micAudioSource.stopRecording()
-                                    val acousticAcuity = withContext(Dispatchers.Default) {
-                                        AcousticFeatureExtractor.analyzePcmBuffer(sample.pcmData)
+                                    val neuralResult = withContext(Dispatchers.Default) {
+                                        onnxEngine.inferAudio(sample.pcmData)
                                     }
                                     val currentJaw = liveMouthMetrics.jawOpen
                                     val currentRoundness = liveMouthMetrics.lipRoundness
 
                                     rawResultJson = PronunciationCoreBridge.safeScoreFunk(
-                                        acousticAcuity.targetProb,
-                                        acousticAcuity.confusionProb,
+                                        neuralResult.targetProb,
+                                        neuralResult.confusionProb,
                                         currentJaw,
                                         currentRoundness
                                     )
-                                    currentTestMode = "Live: ${acousticAcuity.detectedPhoneme} [Jaw: ${(currentJaw * 100).toInt()}%]"
+                                    currentTestMode = "Live: ${neuralResult.dominantPhoneme} [Jaw: ${(currentJaw * 100).toInt()}%]"
                                 }
                             }
                         },
@@ -272,7 +273,7 @@ fun PracticeScreen() {
                 ) {
                     Text("🧪 物理测试文件真实端到端推理", color = Color(0xFF64B5F6), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Spacer(Modifier.height(4.dp))
-                    Text("加载真实 WAV 频谱 + ML Kit 真实图片几何解算 (无假数据)", color = Color.Gray, fontSize = 11.sp)
+                    Text("ONNX Runtime 声学神经网络 + ML Kit 视觉神经网络 (真双模型推理)", color = Color(0xFF81C784), fontSize = 11.sp)
                     Spacer(Modifier.height(10.dp))
 
                     // Row 1: Good Golden Test
@@ -281,13 +282,13 @@ fun PracticeScreen() {
                             coroutineScope.launch {
                                 currentTestMode = "TC-01: 黄金标准 (funk_good.wav + standard_face.jpg)"
                                 val pcm = TestArtifactPipeline.readPcmFromRawResource(context, R.raw.funk_good)
-                                val acoustic = AcousticFeatureExtractor.analyzePcmBuffer(pcm)
+                                val acousticNeural = withContext(Dispatchers.Default) { onnxEngine.inferAudio(pcm) }
                                 val vision = TestArtifactPipeline.analyzeTestImageFromAssets(
                                     context, "test_images/face_standard_caret.jpg"
                                 )
                                 rawResultJson = PronunciationCoreBridge.safeScoreFunk(
-                                    acoustic.targetProb,
-                                    acoustic.confusionProb,
+                                    acousticNeural.targetProb,
+                                    acousticNeural.confusionProb,
                                     vision.jawOpen,
                                     vision.lipRoundness
                                 )
@@ -308,13 +309,13 @@ fun PracticeScreen() {
                             coroutineScope.launch {
                                 currentTestMode = "TC-02: 混淆发音 (funk_ah_like.wav + wide_open_face.jpg)"
                                 val pcm = TestArtifactPipeline.readPcmFromRawResource(context, R.raw.funk_ah_like)
-                                val acoustic = AcousticFeatureExtractor.analyzePcmBuffer(pcm)
+                                val acousticNeural = withContext(Dispatchers.Default) { onnxEngine.inferAudio(pcm) }
                                 val vision = TestArtifactPipeline.analyzeTestImageFromAssets(
                                     context, "test_images/face_wide_open_ah.jpg"
                                 )
                                 rawResultJson = PronunciationCoreBridge.safeScoreFunk(
-                                    acoustic.targetProb,
-                                    acoustic.confusionProb,
+                                    acousticNeural.targetProb,
+                                    acousticNeural.confusionProb,
                                     vision.jawOpen,
                                     vision.lipRoundness
                                 )
@@ -335,13 +336,13 @@ fun PracticeScreen() {
                             coroutineScope.launch {
                                 currentTestMode = "TC-03: 对抗负样本 (chinese_mismatch.wav + closed_mouth.jpg)"
                                 val pcm = TestArtifactPipeline.readPcmFromRawResource(context, R.raw.chinese_mismatch)
-                                val acoustic = AcousticFeatureExtractor.analyzePcmBuffer(pcm)
+                                val acousticNeural = withContext(Dispatchers.Default) { onnxEngine.inferAudio(pcm) }
                                 val vision = TestArtifactPipeline.analyzeTestImageFromAssets(
                                     context, "test_images/face_closed_mouth.jpg"
                                 )
                                 rawResultJson = PronunciationCoreBridge.safeScoreFunk(
-                                    acoustic.targetProb,
-                                    acoustic.confusionProb,
+                                    acousticNeural.targetProb,
+                                    acousticNeural.confusionProb,
                                     vision.jawOpen,
                                     vision.lipRoundness
                                 )
