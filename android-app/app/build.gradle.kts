@@ -64,4 +64,5 @@ dependencies {
     implementation(libs.androidx.camera.view)
     
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

@@ -29,7 +29,7 @@ class MicrophoneAudioSource : AudioSource {
 
 class WavFileAudioSource(
     val fileName: String,
-    override val sourceName: String,
+    override val sourceName: String = fileName,
     private val simulatedDurationMs: Long = 620L
 ) : AudioSource {
     override val isAvailable: Boolean = true

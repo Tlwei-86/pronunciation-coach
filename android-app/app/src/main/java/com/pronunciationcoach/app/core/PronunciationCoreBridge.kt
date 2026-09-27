@@ -104,14 +104,20 @@ object PronunciationCoreBridge {
             })
         }
 
-        return JSONObject().apply {
+                return JSONObject().apply {
             put("targetWord", "funk")
+            put("target_word", "funk")
             put("targetIpa", "/fʌŋk/")
             put("overallScore", overall)
+            put("overall_score", overall)
             put("acousticScore", (targetProb * 100).toInt())
+            put("acoustic_score", (targetProb * 100).toInt())
             put("visualScore", ((1.0f - jawOpen) * 100).toInt())
+            put("visual_score", ((1.0f - jawOpen) * 100).toInt())
             put("feedbackSummary", if (isGood) "Excellent pronunciation!" else "Noticeable /ʌ/ vs /ɑ/ confusion.")
+            put("guidance", if (isGood) "Excellent pronunciation!" else "Noticeable /ʌ/ vs /ɑ/ confusion.")
             put("phonemeEvaluations", phonemes)
+            put("phoneme_scores", phonemes)
             put("actionableTips", JSONArray().apply {
                 if (!isGood) put("Reduce jaw opening: keep your mouth more relaxed, not wide open like /ɑ/.")
                 else put("Great articulation on vowel centering and velar closure.")
