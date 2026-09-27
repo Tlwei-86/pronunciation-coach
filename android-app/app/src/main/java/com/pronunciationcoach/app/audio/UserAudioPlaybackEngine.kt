@@ -202,13 +202,13 @@ class UserAudioPlaybackEngine(private val context: Context) {
                     player.start()
                 }
                 setOnCompletionListener { player ->
-                    isPlaying = false
+                    this@UserAudioPlaybackEngine.isPlaying = false
                     player.release()
                     activeMediaPlayer = null
                     onComplete?.invoke()
                 }
                 setOnErrorListener { player, _, _ ->
-                    isPlaying = false
+                    this@UserAudioPlaybackEngine.isPlaying = false
                     player.release()
                     activeMediaPlayer = null
                     onComplete?.invoke()

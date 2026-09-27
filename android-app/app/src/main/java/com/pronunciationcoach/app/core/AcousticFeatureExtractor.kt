@@ -253,8 +253,9 @@ object AcousticFeatureExtractor {
         }
 
         if (windowCount > 0) {
+            val countF = windowCount.toFloat()
             for (k in 0 until halfFft) {
-                avgPower[k] /= windowCount
+                avgPower[k] = avgPower[k] / countF
             }
         }
 
