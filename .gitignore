@@ -1,0 +1,42 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Android / Gradle
+.gradle/
+build/
+**/build/
+local.properties
+*.iml
+.idea/
+*.apk
+*.aab
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Models & Large Data (download via script)
+models/*.onnx
+models/*.bin
+models/*.safetensors
+!models/README.md
+!models/download_models.py
+
+# Datasets
+datasets/*.wav
+datasets/*.mp4
+!datasets/README.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+.venv/
+venv/
+env/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.log
