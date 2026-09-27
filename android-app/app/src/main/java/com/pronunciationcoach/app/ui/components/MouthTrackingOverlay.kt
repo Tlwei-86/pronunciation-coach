@@ -73,40 +73,42 @@ fun MouthTrackingOverlay(
         drawTargetReticle(centerX, centerY, animatedColor)
 
         // 2. Draw Lip Mesh (Real ML Kit contour points or synthesized articulatory mesh)
-        drawMouthMesh(
+        drawLipMesh(
+            contourPoints = metrics.lipContourPoints,
+            jawOpen = metrics.jawOpen,
+            roundness = metrics.lipRoundness,
             centerX = centerX,
             centerY = centerY,
-            metrics = metrics,
             hudColor = animatedColor
         )
 
-        // 3. Draw Vertical Caliper Gauge & Percentage
-        drawVerticalCaliperGauge(
+        // 3. Draw Vertical Caliper Gauge on the right
+        drawCaliperGauge(
             w = w,
             h = h,
-            centerY = centerY,
-            metrics = metrics,
+            jawOpen = metrics.jawOpen,
             hudColor = animatedColor,
-            textPaint = nativeTextPaint
+            paint = nativeTextPaint
         )
     }
 }
 
 /**
- * Draws HUD reticle with corner brackets and centering crosshairs.
+ * Draws HUD reticle around the central oral cavity area.
  */
 private fun DrawScope.drawTargetReticle(
     centerX: Float,
     centerY: Float,
     hudColor: Color
 ) {
-    val boxWidth = 180.dp.toPx()
-    val boxHeight = 110.dp.toPx()
+    val boxWidth = 220.dp.toPx()
+    val boxHeight = 160.dp.toPx()
     val left = centerX - boxWidth / 2f
-    val right = centerX + boxWidth / 2f
     val top = centerY - boxHeight / 2f
+    val right = centerX + boxWidth / 2f
     val bottom = centerY + boxHeight / 2f
-    val bracketLen = 22.dp.toPx()
+
+    val bracketLen = 24.dp.toPx()
     val strokeWidth = 2.dp.toPx()
 
     val bracketColor = hudColor.copy(alpha = 0.85f)
@@ -130,7 +132,6 @@ private fun DrawScope.drawTargetReticle(
 
     // Center Crosshairs
     val crossHairSize = 10.dp.toPx()
-    val dashEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f)
     drawLine(
         color = hudColor.copy(alpha = 0.45f),
         start = Offset(centerX - crossHairSize, centerY),
@@ -143,52 +144,42 @@ private fun DrawScope.drawTargetReticle(
         end = Offset(centerX, centerY + crossHairSize),
         strokeWidth = 1.5.dp.toPx()
     )
-
-    // Dashed center ellipse (Ideal /ʌ/ target guide zone)
-    drawOval(
-        color = Color(0xFF00E676).copy(alpha = 0.25f),
-        topLeft = Offset(centerX - 42.dp.toPx(), centerY - 14.dp.toPx()),
-        size = Size(84.dp.toPx(), 28.dp.toPx()),
-        style = Stroke(width = 1.5.dp.toPx(), pathEffect = dashEffect)
-    )
 }
 
 /**
- * Draws dynamic lip tracking contour mesh and caliper lines.
+ * Draws dynamic lip contours either from real ML Kit points or synthesized articulatory mesh.
  */
-private fun DrawScope.drawMouthMesh(
+private fun DrawScope.drawLipMesh(
+    contourPoints: List<PointF>,
+    jawOpen: Float,
+    roundness: Float,
     centerX: Float,
     centerY: Float,
-    metrics: LiveFaceMouthMetrics,
     hudColor: Color
 ) {
-    val jawOpen = metrics.jawOpen.coerceIn(0.08f, 0.95f)
-    val roundness = metrics.lipRoundness.coerceIn(0.05f, 0.60f)
-    val points = metrics.lipContourPoints
-
-    if (points.isNotEmpty() && metrics.isFaceDetected) {
-        // ML Kit contour coordinates are present: normalize and scale them to HUD center
+    if (contourPoints.size >= 8) {
+        // Map ML Kit points to Compose canvas centered bounding box
         var minX = Float.MAX_VALUE
         var maxX = Float.MIN_VALUE
         var minY = Float.MAX_VALUE
         var maxY = Float.MIN_VALUE
 
-        for (pt in points) {
+        for (pt in contourPoints) {
             if (pt.x < minX) minX = pt.x
             if (pt.x > maxX) maxX = pt.x
             if (pt.y < minY) minY = pt.y
             if (pt.y > maxY) maxY = pt.y
         }
 
-        val rangeX = max(1f, maxX - minX)
-        val rangeY = max(1f, maxY - minY)
+        val origWidth = max(1f, maxX - minX)
+        val origHeight = max(1f, maxY - minY)
 
-        val targetWidth = 140.dp.toPx()
-        val targetHeight = (targetWidth * (rangeY / rangeX)).coerceIn(24.dp.toPx(), 90.dp.toPx())
+        val targetWidth = 160.dp.toPx()
+        val targetHeight = targetWidth * (origHeight / origWidth)
 
-        val scaledPoints = points.map { pt ->
-            val normX = (pt.x - minX) / rangeX - 0.5f
-            val normY = (pt.y - minY) / rangeY - 0.5f
+        val scaledPoints = contourPoints.map { pt ->
+            val normX = (pt.x - minX) / origWidth - 0.5f
+            val normY = (pt.y - minY) / origHeight - 0.5f
             Offset(centerX + normX * targetWidth, centerY + normY * targetHeight)
         }
 
@@ -253,7 +244,6 @@ private fun DrawScope.drawMouthMesh(
                 centerX + halfW * 0.5f, upperLipTopY - 4.dp.toPx(),
                 centerX + halfW, centerY
             )
-            // Inner upper edge
             cubicTo(
                 centerX + halfW * 0.5f, upperLipBottomY,
                 centerX - halfW * 0.5f, upperLipBottomY,
@@ -279,12 +269,28 @@ private fun DrawScope.drawMouthMesh(
         }
 
         // Glow pass
-        drawPath(upperPath, hudColor.copy(alpha = 0.25f), Stroke(width = 6.dp.toPx()))
-        drawPath(lowerPath, hudColor.copy(alpha = 0.25f), Stroke(width = 6.dp.toPx()))
+        drawPath(
+            path = upperPath,
+            color = hudColor.copy(alpha = 0.25f),
+            style = Stroke(width = 6.dp.toPx())
+        )
+        drawPath(
+            path = lowerPath,
+            color = hudColor.copy(alpha = 0.25f),
+            style = Stroke(width = 6.dp.toPx())
+        )
 
         // Main wireframe lines
-        drawPath(upperPath, hudColor, Stroke(width = 2.dp.toPx()))
-        drawPath(lowerPath, hudColor, Stroke(width = 2.dp.toPx()))
+        drawPath(
+            path = upperPath,
+            color = hudColor,
+            style = Stroke(width = 2.dp.toPx())
+        )
+        drawPath(
+            path = lowerPath,
+            color = hudColor,
+            style = Stroke(width = 2.dp.toPx())
+        )
 
         // Inner oral cavity fill & grid mesh
         drawOval(
@@ -320,118 +326,93 @@ private fun DrawScope.drawCaliperGuideLines(
     lipWidth: Float,
     hudColor: Color
 ) {
-    val dashEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
-    val rightExtent = size.width - 64.dp.toPx()
+    val dash = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+    val guideColor = hudColor.copy(alpha = 0.35f)
 
-    // Top caliper line
+    // Top horizontal limit line
     drawLine(
-        color = hudColor.copy(alpha = 0.65f),
-        start = Offset(centerX + lipWidth * 0.45f, topY),
-        end = Offset(rightExtent, topY),
-        strokeWidth = 1.2.dp.toPx(),
-        pathEffect = dashEffect
+        color = guideColor,
+        start = Offset(centerX - lipWidth / 2f - 10.dp.toPx(), topY),
+        end = Offset(centerX + lipWidth / 2f + 30.dp.toPx(), topY),
+        strokeWidth = 1.dp.toPx(),
+        pathEffect = dash
     )
 
-    // Bottom caliper line
+    // Bottom horizontal limit line
     drawLine(
-        color = hudColor.copy(alpha = 0.65f),
-        start = Offset(centerX + lipWidth * 0.45f, bottomY),
-        end = Offset(rightExtent, bottomY),
-        strokeWidth = 1.2.dp.toPx(),
-        pathEffect = dashEffect
+        color = guideColor,
+        start = Offset(centerX - lipWidth / 2f - 10.dp.toPx(), bottomY),
+        end = Offset(centerX + lipWidth / 2f + 30.dp.toPx(), bottomY),
+        strokeWidth = 1.dp.toPx(),
+        pathEffect = dash
     )
-
-    // Caliper height vertical span bar
-    val caliperBarX = rightExtent + 6.dp.toPx()
-    drawLine(
-        color = hudColor,
-        start = Offset(caliperBarX, topY),
-        end = Offset(caliperBarX, bottomY),
-        strokeWidth = 2.dp.toPx()
-    )
-    // Little end ticks
-    drawLine(hudColor, Offset(caliperBarX - 4.dp.toPx(), topY), Offset(caliperBarX + 4.dp.toPx(), topY), 2.dp.toPx())
-    drawLine(hudColor, Offset(caliperBarX - 4.dp.toPx(), bottomY), Offset(caliperBarX + 4.dp.toPx(), bottomY), 2.dp.toPx())
 }
 
 /**
- * Draws vertical caliper gauge on the right edge showing normalized jaw percentage.
+ * Draws vertical Caliper Gauge showing normalized aperture and optimal target brackets.
  */
-private fun DrawScope.drawVerticalCaliperGauge(
+private fun DrawScope.drawCaliperGauge(
     w: Float,
     h: Float,
-    centerY: Float,
-    metrics: LiveFaceMouthMetrics,
+    jawOpen: Float,
     hudColor: Color,
-    textPaint: Paint
+    paint: Paint
 ) {
-    val gaugeWidth = 10.dp.toPx()
-    val gaugeHeight = 130.dp.toPx()
-    val gaugeX = w - 34.dp.toPx()
-    val gaugeTop = centerY - gaugeHeight / 2f
-    val gaugeBottom = centerY + gaugeHeight / 2f
+    val gaugeRight = w - 16.dp.toPx()
+    val gaugeTop = h * 0.22f
+    val gaugeHeight = h * 0.56f
+    val gaugeBottom = gaugeTop + gaugeHeight
 
-    // Background track
-    drawRoundRect(
-        color = Color(0x77000000),
-        topLeft = Offset(gaugeX, gaugeTop),
-        size = Size(gaugeWidth, gaugeHeight),
-        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx())
-    )
-
-    // Ideal /ʌ/ zone marker (0.18f .. 0.28f normalized)
-    val idealTop = gaugeBottom - gaugeHeight * 0.28f
-    val idealHeight = gaugeHeight * (0.28f - 0.18f)
-    drawRect(
-        color = Color(0x5500E676),
-        topLeft = Offset(gaugeX, idealTop),
-        size = Size(gaugeWidth, idealHeight)
-    )
-
-    // Active fill level (inverted: 0 at bottom, 1.0 at top)
-    val fillPercent = metrics.jawOpen.coerceIn(0f, 1f)
-    val fillHeight = gaugeHeight * fillPercent
-    val fillTop = gaugeBottom - fillHeight
-
-    drawRoundRect(
-        color = hudColor,
-        topLeft = Offset(gaugeX, fillTop),
-        size = Size(gaugeWidth, fillHeight),
-        cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
-    )
-
-    // Needle indicator tick
+    // Background track line
     drawLine(
-        color = Color.White,
-        start = Offset(gaugeX - 4.dp.toPx(), fillTop),
-        end = Offset(gaugeX + gaugeWidth + 4.dp.toPx(), fillTop),
-        strokeWidth = 2.5.dp.toPx()
+        color = Color(0x55FFFFFF),
+        start = Offset(gaugeRight, gaugeTop),
+        end = Offset(gaugeRight, gaugeBottom),
+        strokeWidth = 2.dp.toPx()
     )
 
-    // Gauge border
-    drawRoundRect(
-        color = Color(0x66FFFFFF),
-        topLeft = Offset(gaugeX, gaugeTop),
-        size = Size(gaugeWidth, gaugeHeight),
-        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()),
-        style = Stroke(width = 1.dp.toPx())
+    // Target zone green bracket (0.18f to 0.28f of gauge)
+    val targetTop = gaugeBottom - (gaugeHeight * 0.28f)
+    val targetBottom = gaugeBottom - (gaugeHeight * 0.18f)
+    drawRect(
+        color = Color(0x3300E676),
+        topLeft = Offset(gaugeRight - 14.dp.toPx(), targetTop),
+        size = Size(14.dp.toPx(), targetBottom - targetTop)
+    )
+    drawLine(
+        color = Color(0xFF00E676),
+        start = Offset(gaugeRight - 14.dp.toPx(), targetTop),
+        end = Offset(gaugeRight, targetTop),
+        strokeWidth = 2.dp.toPx()
+    )
+    drawLine(
+        color = Color(0xFF00E676),
+        start = Offset(gaugeRight - 14.dp.toPx(), targetBottom),
+        end = Offset(gaugeRight, targetBottom),
+        strokeWidth = 2.dp.toPx()
     )
 
-    // Draw percentage text using native canvas
-    drawContext.canvas.nativeCanvas.apply {
-        textPaint.color = android.graphics.Color.argb(
-            (hudColor.alpha * 255).toInt(),
-            (hudColor.red * 255).toInt(),
-            (hudColor.green * 255).toInt(),
-            (hudColor.blue * 255).toInt()
-        )
-        textPaint.textSize = 28f
-        val pctText = "${(metrics.jawOpen * 100).toInt()}%"
-        drawText(pctText, gaugeX - textPaint.measureText(pctText) - 8f, fillTop + 10f, textPaint)
+    // Current jaw indicator cursor
+    val clampedJaw = jawOpen.coerceIn(0f, 1f)
+    val cursorY = gaugeBottom - (gaugeHeight * clampedJaw)
 
-        // Gauge Title
-        textPaint.color = android.graphics.Color.argb(180, 200, 200, 200)
-        textPaint.textSize = 20f
-        drawText("JAW", gaugeX - 6f, gaugeTop - 8f, textPaint)
+    // Draw pointer triangle
+    val pointerPath = Path().apply {
+        moveTo(gaugeRight - 2.dp.toPx(), cursorY)
+        lineTo(gaugeRight - 10.dp.toPx(), cursorY - 5.dp.toPx())
+        lineTo(gaugeRight - 10.dp.toPx(), cursorY + 5.dp.toPx())
+        close()
     }
+    drawPath(pointerPath, hudColor)
+
+    // Text metrics
+    val pctText = "${(clampedJaw * 100).toInt()}%"
+    paint.color = android.graphics.Color.WHITE
+    paint.textSize = 28f
+    drawContext.canvas.nativeCanvas.drawText(
+        pctText,
+        gaugeRight - 42.dp.toPx(),
+        cursorY + 9f,
+        paint
+    )
 }
