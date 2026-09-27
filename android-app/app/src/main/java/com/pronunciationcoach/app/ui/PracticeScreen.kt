@@ -9,11 +9,9 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -29,8 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.pronunciationcoach.app.R
 import com.pronunciationcoach.app.core.AcousticFeatureExtractor
 import com.pronunciationcoach.app.core.PronunciationCoreBridge
+import com.pronunciationcoach.app.core.TestArtifactPipeline
 import com.pronunciationcoach.app.domain.MicrophoneAudioSource
 import com.pronunciationcoach.app.vision.LiveFaceMouthMetrics
 import com.pronunciationcoach.app.vision.RealFaceLandmarkAnalyzer
@@ -50,7 +50,7 @@ fun PracticeScreen() {
     var rawResultJson by remember { mutableStateOf<String?>(null) }
     var currentTestMode by remember { mutableStateOf("Ready") }
 
-    // Live Visual Mouth Tracking Metrics (From Real CameraX + ML Kit)
+    // Live Visual Mouth Tracking Metrics
     var liveMouthMetrics by remember {
         mutableStateOf(
             LiveFaceMouthMetrics(
@@ -86,15 +86,12 @@ fun PracticeScreen() {
 
     val micAudioSource = remember { MicrophoneAudioSource() }
     var isLiveRecording by remember { mutableStateOf(false) }
-    var liveAudioEnergy by remember { mutableStateOf(0f) }
-    var liveDetectedVowel by remember { mutableStateOf("Ready") }
-
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Pronunciation Coach V0.2", fontWeight = FontWeight.Bold) },
+                title = { Text("Pronunciation Coach (Neural Pipeline)", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFF1E1E2C),
                     titleContentColor = Color.White
@@ -110,7 +107,7 @@ fun PracticeScreen() {
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Target Word Card
             Card(
@@ -119,12 +116,12 @@ fun PracticeScreen() {
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF222233))
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Target Word", fontSize = 14.sp, color = Color.Gray)
-                    Text("funk", fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF4E95FF))
-                    Text("/fʌŋk/", fontSize = 20.sp, color = Color(0xFFAAAAAA))
+                    Text("Target Word", fontSize = 13.sp, color = Color.Gray)
+                    Text("funk", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF4E95FF))
+                    Text("/fʌŋk/", fontSize = 18.sp, color = Color(0xFFAAAAAA))
                 }
             }
 
@@ -132,7 +129,7 @@ fun PracticeScreen() {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(230.dp),
+                    .height(210.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1B1B26))
             ) {
@@ -148,7 +145,6 @@ fun PracticeScreen() {
                                         it.setSurfaceProvider(previewView.surfaceProvider)
                                     }
 
-                                    // Real-time mouth landmark analysis
                                     val imageAnalysis = ImageAnalysis.Builder()
                                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                         .build()
@@ -178,25 +174,20 @@ fun PracticeScreen() {
                             },
                             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
                         )
-                    } else {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("📷 摄像头未授权", color = Color.LightGray, fontSize = 16.sp)
-                            Text("请开启相机权限以实时监测口唇开合度", color = Color.Gray, fontSize = 12.sp)
-                        }
                     }
 
                     // Live Vision HUD Metrics Bar
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(10.dp),
+                            .padding(8.dp),
                         contentAlignment = Alignment.BottomStart
                     ) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = Color(0xDD12121A)
                         ) {
-                            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                                 Text(
                                     "👄 实时唇形开合: ${(liveMouthMetrics.jawOpen * 100).toInt()}% | ${liveMouthMetrics.statusText}",
                                     color = if (liveMouthMetrics.jawOpen > 0.60f) Color(0xFFFF8A80) else Color(0xFF81C784),
@@ -214,24 +205,18 @@ fun PracticeScreen() {
                 }
             }
 
-            // Real Live Recording Controls with DSP Formant Recognition
+            // Real Live Recording Controls
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2C))
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    modifier = Modifier.padding(14.dp).fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("真机实时声学与口唇综合测评", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "基于 16kHz 傅里叶频谱共振峰 + 真实面部下颌开合",
-                        color = Color.Gray,
-                        fontSize = 11.sp
-                    )
-                    Spacer(Modifier.height(10.dp))
+                    Text("真机实时声学与口唇测评", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
                     Button(
                         onClick = {
                             if (!isLiveRecording) {
@@ -244,16 +229,9 @@ fun PracticeScreen() {
                                 isLiveRecording = false
                                 coroutineScope.launch {
                                     val sample = micAudioSource.stopRecording()
-                                    val rms = MicrophoneAudioSource.calculateRms(sample.pcmData)
-                                    liveAudioEnergy = rms
-
-                                    // 1. Run real DSP Formant/Spectrum Extraction on PCM data
                                     val acousticAcuity = withContext(Dispatchers.Default) {
                                         AcousticFeatureExtractor.analyzePcmBuffer(sample.pcmData)
                                     }
-                                    liveDetectedVowel = "${acousticAcuity.detectedPhoneme} (${acousticAcuity.vowelQuality})"
-
-                                    // 2. Feed real live visual jaw openness + real live acoustic formant probability into Rust Core
                                     val currentJaw = liveMouthMetrics.jawOpen
                                     val currentRoundness = liveMouthMetrics.lipRoundness
 
@@ -263,7 +241,7 @@ fun PracticeScreen() {
                                         currentJaw,
                                         currentRoundness
                                     )
-                                    currentTestMode = "Live Test: ${acousticAcuity.detectedPhoneme} [Jaw: ${(currentJaw * 100).toInt()}%]"
+                                    currentTestMode = "Live: ${acousticAcuity.detectedPhoneme} [Jaw: ${(currentJaw * 100).toInt()}%]"
                                 }
                             }
                         },
@@ -274,44 +252,111 @@ fun PracticeScreen() {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            if (isLiveRecording) "⏹ 停止录音并评测 (真实分析中)" else "🎙 按下开始实时录音评测",
-                            fontSize = 15.sp,
+                            if (isLiveRecording) "⏹ 停止录音并评测" else "🎙 按下开始实时录音评测",
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
 
-            // Quick Verification Test Buttons (Benchmark Presets)
-            Text("仿真金标对比 (Benchmark Presets)", color = Color.Gray, fontSize = 13.sp)
-            Row(
+            // Real Physical File Pipeline Verification (Strict Test Artifact Execution)
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2C))
             ) {
-                Button(
-                    onClick = {
-                        currentTestMode = "Golden: funk_good.wav"
-                        rawResultJson = PronunciationCoreBridge.safeScoreFunk(0.92f, 0.05f, 0.45f, 0.10f)
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                Column(
+                    modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("funk_good", fontSize = 12.sp)
-                }
+                    Text("🧪 物理测试文件真实端到端推理", color = Color(0xFF64B5F6), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text("加载真实 WAV 频谱 + ML Kit 真实图片几何解算 (无假数据)", color = Color.Gray, fontSize = 11.sp)
+                    Spacer(Modifier.height(10.dp))
 
-                Button(
-                    onClick = {
-                        currentTestMode = "Confusion: funk_ah_like.wav"
-                        rawResultJson = PronunciationCoreBridge.safeScoreFunk(0.48f, 0.42f, 0.72f, 0.08f)
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
-                ) {
-                    Text("funk_ah (/ɑ/)", fontSize = 12.sp)
+                    // Row 1: Good Golden Test
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                currentTestMode = "TC-01: 黄金标准 (funk_good.wav + standard_face.jpg)"
+                                val pcm = TestArtifactPipeline.readPcmFromRawResource(context, R.raw.funk_good)
+                                val acoustic = AcousticFeatureExtractor.analyzePcmBuffer(pcm)
+                                val vision = TestArtifactPipeline.analyzeTestImageFromAssets(
+                                    context, "test_images/face_standard_caret.jpg"
+                                )
+                                rawResultJson = PronunciationCoreBridge.safeScoreFunk(
+                                    acoustic.targetProb,
+                                    acoustic.confusionProb,
+                                    vision.jawOpen,
+                                    vision.lipRoundness
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("🟢 [实测 TC-01] 黄金标准 (funk_good.wav)", fontSize = 13.sp)
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Row 2: Over-opened /ɑ/ Confusion Test
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                currentTestMode = "TC-02: 混淆发音 (funk_ah_like.wav + wide_open_face.jpg)"
+                                val pcm = TestArtifactPipeline.readPcmFromRawResource(context, R.raw.funk_ah_like)
+                                val acoustic = AcousticFeatureExtractor.analyzePcmBuffer(pcm)
+                                val vision = TestArtifactPipeline.analyzeTestImageFromAssets(
+                                    context, "test_images/face_wide_open_ah.jpg"
+                                )
+                                rawResultJson = PronunciationCoreBridge.safeScoreFunk(
+                                    acoustic.targetProb,
+                                    acoustic.confusionProb,
+                                    vision.jawOpen,
+                                    vision.lipRoundness
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("🔴 [实测 TC-02] 混淆发音 (funk_ah_like.wav)", fontSize = 13.sp)
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Row 3: Chinese Mismatch Negative Test
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                currentTestMode = "TC-03: 对抗负样本 (chinese_mismatch.wav + closed_mouth.jpg)"
+                                val pcm = TestArtifactPipeline.readPcmFromRawResource(context, R.raw.chinese_mismatch)
+                                val acoustic = AcousticFeatureExtractor.analyzePcmBuffer(pcm)
+                                val vision = TestArtifactPipeline.analyzeTestImageFromAssets(
+                                    context, "test_images/face_closed_mouth.jpg"
+                                )
+                                rawResultJson = PronunciationCoreBridge.safeScoreFunk(
+                                    acoustic.targetProb,
+                                    acoustic.confusionProb,
+                                    vision.jawOpen,
+                                    vision.lipRoundness
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("⚠️ [实测 TC-03] 对抗负样本 (chinese_mismatch.wav)", fontSize = 13.sp)
+                    }
                 }
             }
 
-            // Score & Analysis Results
+            // Score & Analysis Results Display
             rawResultJson?.let { jsonStr ->
                 val jsonObj = remember(jsonStr) { runCatching { JSONObject(jsonStr) }.getOrNull() }
                 if (jsonObj != null) {
@@ -343,7 +388,11 @@ fun PracticeScreen() {
                                     "$overall",
                                     fontSize = 42.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (overall >= 80) Color(0xFF4CAF50) else Color(0xFFFFB300)
+                                    color = when {
+                                        overall >= 80 -> Color(0xFF4CAF50)
+                                        overall >= 60 -> Color(0xFFFFB300)
+                                        else -> Color(0xFFFF5252)
+                                    }
                                 )
                             }
 
