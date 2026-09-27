@@ -1,9 +1,11 @@
 pub mod confidence;
+pub mod guidance_db;
 pub mod rubric;
 pub mod scorer;
 pub mod tongue;
 
 pub use confidence::*;
+pub use guidance_db::*;
 pub use rubric::*;
 pub use scorer::*;
 pub use tongue::*;

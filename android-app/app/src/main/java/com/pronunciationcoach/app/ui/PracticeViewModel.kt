@@ -1,37 +1,72 @@
 package com.pronunciationcoach.app.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pronunciationcoach.app.audio.StandardAudioPlayer
+import com.pronunciationcoach.app.audio.UserAudioPlaybackEngine
+import com.pronunciationcoach.app.core.AcousticFeatureExtractor
+import com.pronunciationcoach.app.core.PhonemeTemporalAligner
 import com.pronunciationcoach.app.core.PronunciationCoreBridge
 import com.pronunciationcoach.app.domain.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import kotlin.math.abs
 
 /**
- * UI State for the Pronunciation Practice Screen.
+ * UI State for the Pronunciation Coach Practice Screen.
  */
 data class PracticeUiState(
-    val targetWord: String = "funk",
-    val targetIpa: String = "/fʌŋk/",
+    val targetWord: String = "think",
+    val targetIpa: String = "/θɪŋk/",
+    val selectedCategory: String = "齿间擦音 /θ, ð/",
+    val wordDescription: String = "清齿间音：舌尖轻探门牙，吹出柔和清气流",
     val isRecording: Boolean = false,
     val isEvaluating: Boolean = false,
-    val audioSourceLabel: String = "Ready",
-    val videoSourceLabel: String = "Camera Standby",
+    val isFaceDetected: Boolean = false,
+    val faceStatusText: String = "请将面部对准前置镜头",
     val liveJawOpen: Float = 0.38f,
     val liveLipRoundness: Float = 0.15f,
+    val isPlayingStandard: Boolean = false,
+    val isPlayingUserRecording: Boolean = false,
+    val hasUserRecording: Boolean = false,
     val evaluationResult: ReasoningResult? = null,
-    val selectedProviderIndex: Int = 0, // 0 = Local Rule, 1 = DeepSeek
-    val jniStatus: String = if (PronunciationCoreBridge.isLibraryLoaded) "JNI Native Loaded" else "JNI Pure-Kotlin Mode",
-    val statusMessage: String = "Ready to practice 'funk'"
-)
+    val selectedPhonemeSymbol: String? = null,
+    val selectedProviderIndex: Int = 0, // 0 = Local Rule / Core, 1 = DeepSeek
+    val statusMessage: String = "点击下方按钮开始练习"
+) {
+    /**
+     * Currently active phoneme evaluation corresponding to selectedPhonemeSymbol.
+     */
+    val selectedPhoneme: PhonemeEvaluation?
+        get() = evaluationResult?.phonemeEvaluations?.find { it.symbol == selectedPhonemeSymbol }
+            ?: evaluationResult?.phonemeEvaluations?.firstOrNull()
+
+    /**
+     * Primary issue phoneme (lowest score or explicit primary issue).
+     */
+    val primaryIssuePhoneme: PhonemeEvaluation?
+        get() = evaluationResult?.phonemeEvaluations?.find { it.isPrimaryIssue }
+            ?: evaluationResult?.phonemeEvaluations?.minByOrNull { it.score }
+}
 
 class PracticeViewModel(
+    private val context: Context? = null,
     private val localProvider: ReasoningProvider = LocalRuleProvider(),
-    private val deepSeekProvider: ReasoningProvider = DeepSeekProvider()
+    private val deepSeekProvider: ReasoningProvider = DeepSeekProvider(),
+    audioPlayer: StandardAudioPlayer? = null,
+    playbackEngine: UserAudioPlaybackEngine? = null
 ) : ViewModel() {
+
+    private val standardAudioPlayer: StandardAudioPlayer? = audioPlayer ?: context?.let { StandardAudioPlayer(it) }
+    private val userAudioPlaybackEngine: UserAudioPlaybackEngine? = playbackEngine ?: context?.let { UserAudioPlaybackEngine(it) }
 
     private val _uiState = MutableStateFlow(PracticeUiState())
     val uiState: StateFlow<PracticeUiState> = _uiState.asStateFlow()
@@ -40,16 +75,159 @@ class PracticeViewModel(
     private var activeVideoSource: VideoSource = CameraXVideoSource()
 
     init {
-        // Initial test run to populate initial state gracefully
-        runSampleAnalysis(isCanonical = true)
+        // Run initial canonical analysis so the UI gracefully displays demonstration state
+        runInitialDemonstration()
     }
 
-    fun selectProvider(index: Int) {
-        _uiState.update { it.copy(selectedProviderIndex = index) }
+    private fun runInitialDemonstration() {
+        val defaultWord = DEFAULT_PRACTICE_WORDS.firstOrNull() ?: PracticeWord("think", "/θɪŋk/", "齿间擦音 /θ, ð/")
+        _uiState.update {
+            it.copy(
+                targetWord = defaultWord.word,
+                targetIpa = defaultWord.ipa,
+                selectedCategory = defaultWord.category,
+                wordDescription = defaultWord.description
+            )
+        }
     }
 
     /**
-     * Toggles live microphone and camera recording.
+     * Selects a curated practice word from the library.
+     */
+    fun selectPracticeWord(word: PracticeWord) {
+        stopAllAudio()
+        _uiState.update {
+            it.copy(
+                targetWord = word.word,
+                targetIpa = word.ipa,
+                selectedCategory = word.category,
+                wordDescription = word.description,
+                evaluationResult = null,
+                selectedPhonemeSymbol = null,
+                hasUserRecording = false,
+                statusMessage = "已切换到词汇: ${word.word}"
+            )
+        }
+    }
+
+    /**
+     * Sets a user custom word and resolves its phonemes.
+     */
+    fun setCustomWord(wordText: String, ipaText: String? = null) {
+        val clean = wordText.trim().lowercase()
+        if (clean.isEmpty()) return
+
+        stopAllAudio()
+        val phonemes = PhonemeTemporalAligner.getPhonemesForWord(clean)
+        val resolvedIpa = ipaText?.trim()?.takeIf { it.isNotEmpty() }
+            ?: ("/" + phonemes.joinToString("") + "/")
+
+        _uiState.update {
+            it.copy(
+                targetWord = clean,
+                targetIpa = resolvedIpa,
+                selectedCategory = "自定义练习",
+                wordDescription = "自定义词汇练习: $clean",
+                evaluationResult = null,
+                selectedPhonemeSymbol = null,
+                hasUserRecording = false,
+                statusMessage = "已设置自定义词汇: $clean"
+            )
+        }
+    }
+
+    /**
+     * Changes the selected phoneme to inspect its articulatory guidance.
+     */
+    fun selectPhoneme(symbol: String) {
+        val clean = symbol.replace("/", "").trim()
+        _uiState.update { it.copy(selectedPhonemeSymbol = clean) }
+    }
+
+    /**
+     * Updates live face and mouth tracking metrics from CameraX overlay.
+     */
+    fun updateFaceMetrics(jawOpen: Float, lipRoundness: Float, isFaceDetected: Boolean) {
+        _uiState.update {
+            it.copy(
+                liveJawOpen = jawOpen,
+                liveLipRoundness = lipRoundness,
+                isFaceDetected = isFaceDetected,
+                faceStatusText = if (isFaceDetected) "面部已对准" else "请将面部对准前置镜头"
+            )
+        }
+    }
+
+    /**
+     * Plays the native standard English audio via StandardAudioPlayer.
+     */
+    fun playStandardPronunciation() {
+        val player = standardAudioPlayer ?: return
+        val word = _uiState.value.targetWord
+
+        if (_uiState.value.isPlayingStandard) {
+            player.stop()
+            _uiState.update { it.copy(isPlayingStandard = false) }
+            return
+        }
+
+        stopUserRecording()
+
+        _uiState.update { it.copy(isPlayingStandard = true) }
+        player.playWord(
+            text = word,
+            onStart = {
+                _uiState.update { it.copy(isPlayingStandard = true) }
+            },
+            onComplete = {
+                _uiState.update { it.copy(isPlayingStandard = false) }
+            }
+        )
+    }
+
+    fun stopStandardPronunciation() {
+        standardAudioPlayer?.stop()
+        _uiState.update { it.copy(isPlayingStandard = false) }
+    }
+
+    /**
+     * Plays back the user's recorded audio via UserAudioPlaybackEngine.
+     */
+    fun playUserRecording() {
+        val engine = userAudioPlaybackEngine ?: return
+        if (!engine.hasLastRecording()) return
+
+        if (_uiState.value.isPlayingUserRecording) {
+            engine.stopPlayback()
+            _uiState.update { it.copy(isPlayingUserRecording = false) }
+            return
+        }
+
+        stopStandardPronunciation()
+
+        _uiState.update { it.copy(isPlayingUserRecording = true) }
+        engine.playLastRecording(
+            onStart = {
+                _uiState.update { it.copy(isPlayingUserRecording = true) }
+            },
+            onComplete = {
+                _uiState.update { it.copy(isPlayingUserRecording = false) }
+            }
+        )
+    }
+
+    fun stopUserRecording() {
+        userAudioPlaybackEngine?.stopPlayback()
+        _uiState.update { it.copy(isPlayingUserRecording = false) }
+    }
+
+    private fun stopAllAudio() {
+        stopStandardPronunciation()
+        stopUserRecording()
+    }
+
+    /**
+     * Toggles live recording from microphone and camera.
      */
     fun toggleLiveRecording() {
         if (_uiState.value.isRecording) {
@@ -59,7 +237,8 @@ class PracticeViewModel(
         }
     }
 
-    private fun startLiveRecording() {
+    fun startLiveRecording() {
+        stopAllAudio()
         activeAudioSource = MicrophoneAudioSource()
         activeVideoSource = CameraXVideoSource()
 
@@ -67,9 +246,7 @@ class PracticeViewModel(
             it.copy(
                 isRecording = true,
                 isEvaluating = false,
-                audioSourceLabel = "Recording Microphone...",
-                videoSourceLabel = "Tracking Face Landmarks...",
-                statusMessage = "Listening... Speak 'funk'"
+                statusMessage = "正在录制中，请清晰发音: ${_uiState.value.targetWord}"
             )
         }
 
@@ -79,12 +256,12 @@ class PracticeViewModel(
         }
     }
 
-    private fun stopLiveRecording() {
+    fun stopLiveRecording() {
         _uiState.update {
             it.copy(
                 isRecording = false,
                 isEvaluating = true,
-                statusMessage = "Processing Multimodal Evidence..."
+                statusMessage = "正在进行多模态发音评测..."
             )
         }
 
@@ -92,123 +269,168 @@ class PracticeViewModel(
             val audioData = activeAudioSource.stopRecording()
             val videoData = activeVideoSource.stopCapture()
 
-            // Construct Multimodal Evidence
-            val evidence = EvidencePayload(
-                targetWord = _uiState.value.targetWord,
-                targetIpa = _uiState.value.targetIpa,
-                acousticFeatures = AcousticFeatures(
-                    durationMs = audioData.durationMs,
-                    targetPhonemeProb = 0.82f,
-                    confusionPhonemeProb = 0.18f,
-                    energyRms = 0.08f,
-                    pitchHz = 135.0f
-                ),
-                visualFeatures = VisualFeatures(
-                    jawOpen = videoData.averageJawOpen,
-                    lipRoundness = videoData.averageLipRoundness,
-                    mouthWidth = 0.52f,
-                    mouthHeight = 0.35f,
-                    faceDetected = true
-                )
-            )
+            // Cache recording for instant user playback
+            userAudioPlaybackEngine?.saveRecording(audioData.pcmData, audioData.sampleRate)
 
-            evaluateEvidence(evidence, audioData.sourceDescription)
+            _uiState.update { it.copy(hasUserRecording = true) }
+
+            evaluateAudioPcm(
+                pcmData = audioData.pcmData,
+                jawOpen = videoData.averageJawOpen,
+                lipRoundness = videoData.averageLipRoundness
+            )
         }
     }
 
     /**
-     * Executes automated test using the canonical /fʌŋk/ test WAV (Spec Section 40 Agent-Friendly testing).
+     * Evaluates PCM audio data against target word and visual features.
      */
-    fun runCanonicalTestWav() {
-        runSampleAnalysis(isCanonical = true)
+    fun evaluateAudioPcm(
+        pcmData: ByteArray,
+        jawOpen: Float = _uiState.value.liveJawOpen,
+        lipRoundness: Float = _uiState.value.liveLipRoundness
+    ) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isEvaluating = true) }
+
+            val targetWord = _uiState.value.targetWord
+            val targetIpa = _uiState.value.targetIpa
+
+            val result = withContext(Dispatchers.Default) {
+                // 1. Acoustic and temporal alignment
+                val segments = PhonemeTemporalAligner.alignWord(pcmData, targetWord)
+                val formants = AcousticFeatureExtractor.extractFormants(pcmData)
+                val acuity = AcousticFeatureExtractor.analyzePcmBuffer(pcmData)
+
+                // 2. Build multi-phoneme evidence JSON
+                val evidenceJson = JSONObject().apply {
+                    put("target_word", targetWord)
+                    put("targetWord", targetWord)
+                    put("target_ipa", targetIpa)
+                    put("targetIpa", targetIpa)
+
+                    val phonemesArr = JSONArray()
+                    for (seg in segments) {
+                        val segFeatures = AcousticFeatureExtractor.analyzePhonemeCategory(seg.pcmChunk, seg.phoneme)
+                        val pObj = JSONObject().apply {
+                            put("symbol", seg.phoneme)
+                            put("phoneme", seg.phoneme)
+                            put("audio", JSONObject().apply {
+                                put("target_probability", (segFeatures.score / 100f).coerceIn(0.1f, 0.99f))
+                                put("f1_hz", formants.f1)
+                                put("f2_hz", formants.f2)
+                                put("duration_ms", seg.endMs - seg.startMs)
+                            })
+                            put("visual", JSONObject().apply {
+                                put("jaw_open", jawOpen)
+                                put("lip_roundness", lipRoundness)
+                            })
+                        }
+                        phonemesArr.put(pObj)
+                    }
+                    put("phonemes", phonemesArr)
+
+                    put("audio", JSONObject().apply {
+                        put("target_probability", acuity.targetProb)
+                        put("f1_hz", formants.f1)
+                        put("f2_hz", formants.f2)
+                        put("duration_ms", (pcmData.size / 32).toLong())
+                    })
+                    put("visual", JSONObject().apply {
+                        put("jaw_open", jawOpen)
+                        put("lip_roundness", lipRoundness)
+                    })
+                }.toString()
+
+                // 3. Score via PronunciationCoreBridge
+                val resultJson = PronunciationCoreBridge.analyzeWordPronunciation(evidenceJson)
+                ReasoningResult.fromJson(resultJson)
+            }
+
+            // Determine lowest-scoring phoneme as default selected phoneme
+            val lowestPhoneme = result.phonemeEvaluations.minByOrNull { it.score }
+
+            _uiState.update {
+                it.copy(
+                    isEvaluating = false,
+                    evaluationResult = result,
+                    selectedPhonemeSymbol = lowestPhoneme?.symbol ?: result.phonemeEvaluations.firstOrNull()?.symbol,
+                    statusMessage = "评测完成: 得分 ${result.overallScore} 分"
+                )
+            }
+        }
+    }
+
+    fun selectProvider(index: Int) {
+        _uiState.update { it.copy(selectedProviderIndex = index) }
     }
 
     /**
-     * Executes automated test using the confused /fɑŋk/ test WAV (Spec Section 40 Agent-Friendly testing).
+     * Automated test for Canonical /fʌŋk/ test WAV.
      */
-    fun runConfusedTestWav() {
-        runSampleAnalysis(isCanonical = false)
-    }
-
-    private fun runSampleAnalysis(isCanonical: Boolean) {
+    fun runCanonicalTestWav() {
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
-                    isEvaluating = true,
-                    statusMessage = if (isCanonical) "Testing with canonical 'funk_good.wav'..." else "Testing with confused 'funk_ah_like.wav'..."
+                    targetWord = "funk",
+                    targetIpa = "/fʌŋk/",
+                    selectedCategory = "唇齿擦音 /f, v/",
+                    isEvaluating = true
                 )
             }
-
-            val audioSrc = if (isCanonical) {
-                WavFileAudioSource.createCanonicalFunk()
-            } else {
-                WavFileAudioSource.createConfusedAhFunk()
-            }
-
-            val videoSrc = if (isCanonical) {
-                VideoFileSource.createCanonicalFunkVisual()
-            } else {
-                VideoFileSource.createConfusedAhVisual()
-            }
-
+            val audioSrc = WavFileAudioSource.createCanonicalFunk()
+            val videoSrc = VideoFileSource.createCanonicalFunkVisual()
             audioSrc.startRecording()
             videoSrc.startCapture()
-
             val audioData = audioSrc.stopRecording()
             val videoData = videoSrc.stopCapture()
 
-            val evidence = if (isCanonical) {
-                EvidencePayload(
-                    targetWord = "funk",
-                    targetIpa = "fʌŋk",
-                    acousticFeatures = AcousticFeatures(
-                        durationMs = audioData.durationMs,
-                        targetPhonemeProb = 0.91f,
-                        confusionPhonemeProb = 0.08f,
-                        energyRms = 0.09f,
-                        pitchHz = 132f
-                    ),
-                    visualFeatures = VisualFeatures(
-                        jawOpen = videoData.averageJawOpen,     // ~0.38
-                        lipRoundness = videoData.averageLipRoundness // ~0.15
-                    )
-                )
-            } else {
-                EvidencePayload(
-                    targetWord = "funk",
-                    targetIpa = "fʌŋk",
-                    acousticFeatures = AcousticFeatures(
-                        durationMs = audioData.durationMs,
-                        targetPhonemeProb = 0.42f,
-                        confusionPhonemeProb = 0.74f,
-                        energyRms = 0.08f,
-                        pitchHz = 126f
-                    ),
-                    visualFeatures = VisualFeatures(
-                        jawOpen = videoData.averageJawOpen,     // ~0.65 (jaw opened too wide)
-                        lipRoundness = videoData.averageLipRoundness // ~0.22
-                    )
-                )
-            }
+            userAudioPlaybackEngine?.saveRecording(audioData.pcmData)
+            _uiState.update { it.copy(hasUserRecording = true) }
 
-            evaluateEvidence(evidence, audioSrc.sourceName)
+            evaluateAudioPcm(
+                pcmData = audioData.pcmData,
+                jawOpen = videoData.averageJawOpen,
+                lipRoundness = videoData.averageLipRoundness
+            )
         }
     }
 
-    private suspend fun evaluateEvidence(evidence: EvidencePayload, sourceDesc: String) {
-        val provider = if (_uiState.value.selectedProviderIndex == 0) localProvider else deepSeekProvider
-        val result = provider.analyze(evidence)
+    /**
+     * Automated test for Confused /fɑːŋk/ test WAV.
+     */
+    fun runConfusedTestWav() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    targetWord = "funk",
+                    targetIpa = "/fʌŋk/",
+                    selectedCategory = "唇齿擦音 /f, v/",
+                    isEvaluating = true
+                )
+            }
+            val audioSrc = WavFileAudioSource.createConfusedAhFunk()
+            val videoSrc = VideoFileSource.createConfusedAhVisual()
+            audioSrc.startRecording()
+            videoSrc.startCapture()
+            val audioData = audioSrc.stopRecording()
+            val videoData = videoSrc.stopCapture()
 
-        _uiState.update {
-            it.copy(
-                isEvaluating = false,
-                evaluationResult = result,
-                audioSourceLabel = sourceDesc,
-                videoSourceLabel = "Jaw: ${evidence.visualFeatures.jawOpen} | Lip: ${evidence.visualFeatures.lipRoundness}",
-                liveJawOpen = evidence.visualFeatures.jawOpen,
-                liveLipRoundness = evidence.visualFeatures.lipRoundness,
-                statusMessage = "Analysis completed via ${result.providerUsed}"
+            userAudioPlaybackEngine?.saveRecording(audioData.pcmData)
+            _uiState.update { it.copy(hasUserRecording = true) }
+
+            evaluateAudioPcm(
+                pcmData = audioData.pcmData,
+                jawOpen = videoData.averageJawOpen,
+                lipRoundness = videoData.averageLipRoundness
             )
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopAllAudio()
+        standardAudioPlayer?.release()
+        userAudioPlaybackEngine?.release()
     }
 }

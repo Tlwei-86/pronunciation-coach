@@ -34,10 +34,7 @@ pub fn compute_entropy(probs: &[f32]) -> f32 {
 }
 
 /// Analyzes posteriors for a target phoneme against all frame/segment probabilities.
-pub fn analyze_posterior(
-    target_symbol: &str,
-    distribution: &[(String, f32)],
-) -> PosteriorAnalysis {
+pub fn analyze_posterior(target_symbol: &str, distribution: &[(String, f32)]) -> PosteriorAnalysis {
     let mut target_prob = 0.0f32;
     let mut top_competitor: Option<String> = None;
     let mut top_competitor_prob = 0.0f32;

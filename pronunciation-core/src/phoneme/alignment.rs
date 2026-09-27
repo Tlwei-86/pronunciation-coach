@@ -182,7 +182,7 @@ mod tests {
                 "k"
             };
 
-            let mut posteriors = vec![
+            let posteriors = vec![
                 (active.to_string(), 0.85),
                 ("ɑ".to_string(), 0.10),
                 ("<pad>".to_string(), 0.05),

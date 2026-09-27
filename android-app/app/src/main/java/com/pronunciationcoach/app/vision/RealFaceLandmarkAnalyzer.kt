@@ -22,7 +22,9 @@ data class LiveFaceMouthMetrics(
     val lipContourPoints: List<android.graphics.PointF> = emptyList(),
     val sourceImageWidth: Int = 0,
     val sourceImageHeight: Int = 0,
-    val isFrontCamera: Boolean = true
+    val isFrontCamera: Boolean = true,
+    val lipClosure: Float = 0f,
+    val mouthStretch: Float = 0f
 )
 
 class RealFaceLandmarkAnalyzer(
@@ -69,7 +71,9 @@ class RealFaceLandmarkAnalyzer(
                             lipContourPoints = emptyList(),
                             sourceImageWidth = imgWidth,
                             sourceImageHeight = imgHeight,
-                            isFrontCamera = true
+                            isFrontCamera = true,
+                            lipClosure = 0f,
+                            mouthStretch = 0f
                         )
                     )
                 } else {
@@ -102,12 +106,16 @@ class RealFaceLandmarkAnalyzer(
         val mouthLeft = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position
         val mouthRight = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
         val noseBase = face.getLandmark(FaceLandmark.NOSE_BASE)?.position
+        val leftEye = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
+        val rightEye = face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
 
         // Extract detailed 2D lip contour points
         val lipPoints = mutableListOf<android.graphics.PointF>()
+        val upperLipBottomPoints = face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points
+        val lowerLipTopPoints = face.getContour(FaceContour.LOWER_LIP_TOP)?.points
         face.getContour(FaceContour.UPPER_LIP_TOP)?.points?.let { lipPoints.addAll(it) }
-        face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points?.let { lipPoints.addAll(it) }
-        face.getContour(FaceContour.LOWER_LIP_TOP)?.points?.let { lipPoints.addAll(it) }
+        upperLipBottomPoints?.let { lipPoints.addAll(it) }
+        lowerLipTopPoints?.let { lipPoints.addAll(it) }
         face.getContour(FaceContour.LOWER_LIP_BOTTOM)?.points?.let { lipPoints.addAll(it) }
 
         val boundingBox = face.boundingBox
@@ -126,7 +134,27 @@ class RealFaceLandmarkAnalyzer(
             // 3. Lip roundness (ratio of vertical opening to horizontal width)
             val roundness = (normalizedJaw / (normalizedWidth + 0.001f) * 0.25f).coerceIn(0.05f, 0.60f)
 
+            // 4. Bilabial lip closure (for /p, b, m/)
+            val innerLipGap = if (!upperLipBottomPoints.isNullOrEmpty() && !lowerLipTopPoints.isNullOrEmpty()) {
+                val midUpper = upperLipBottomPoints[upperLipBottomPoints.size / 2].y
+                val midLower = lowerLipTopPoints[lowerLipTopPoints.size / 2].y
+                max(0f, midLower - midUpper)
+            } else {
+                max(0f, verticalJawDist - faceHeight * 0.14f)
+            }
+            val lipClosure = (1.0f - (innerLipGap / (faceHeight * 0.12f))).coerceIn(0.0f, 1.0f)
+
+            // 5. Mouth stretch tension (smile tension for /iː/)
+            val interOcularDist = if (leftEye != null && rightEye != null) {
+                abs(rightEye.x - leftEye.x)
+            } else {
+                faceWidth * 0.42f
+            }
+            val mouthStretch = ((mouthWidth / (interOcularDist + 0.001f) - 0.70f) / 0.50f).coerceIn(0.0f, 1.0f)
+
             val status = when {
+                lipClosure > 0.82f -> "🟢 双唇紧闭 (/p, b, m/ 准备就绪)"
+                mouthStretch > 0.75f -> "🟢 嘴角展宽微笑 (/iː/ 展唇)"
                 normalizedJaw > 0.60f -> "⚠️ 下巴张开过大 (类似 /ɑ/)"
                 normalizedJaw < 0.25f -> "口型微闭 / 齿音"
                 else -> "🟢 口型居中放松 (标准 /ʌ/)"
@@ -141,7 +169,9 @@ class RealFaceLandmarkAnalyzer(
                 lipContourPoints = lipPoints,
                 sourceImageWidth = imageWidth,
                 sourceImageHeight = imageHeight,
-                isFrontCamera = isFrontCamera
+                isFrontCamera = isFrontCamera,
+                lipClosure = lipClosure,
+                mouthStretch = mouthStretch
             )
         } else {
             // Face detected but landmarks partially occluded
@@ -154,7 +184,9 @@ class RealFaceLandmarkAnalyzer(
                 lipContourPoints = lipPoints,
                 sourceImageWidth = imageWidth,
                 sourceImageHeight = imageHeight,
-                isFrontCamera = isFrontCamera
+                isFrontCamera = isFrontCamera,
+                lipClosure = 0.3f,
+                mouthStretch = 0.2f
             )
         }
     }

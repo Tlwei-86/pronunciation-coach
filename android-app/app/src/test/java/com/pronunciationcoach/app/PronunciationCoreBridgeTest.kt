@@ -84,4 +84,64 @@ class PronunciationCoreBridgeTest {
         assertTrue(resultObj.has("overallScore"))
         assertTrue(resultObj.has("phonemeEvaluations"))
     }
+
+    @Test
+    fun testAnalyzeWordPronunciationMultiPhonemeOutput() {
+        val evidenceJson = JSONObject().apply {
+            put("target_word", "think")
+            put("phonemes", org.json.JSONArray(listOf("θ", "ɪ", "ŋ", "k")))
+            put("audio", JSONObject().apply {
+                put("target_probability", 0.88)
+                put("f1_hz", 450.0)
+                put("f2_hz", 1800.0)
+            })
+            put("visual", JSONObject().apply {
+                put("jaw_open", 0.32)
+                put("lip_roundness", 0.12)
+                put("mouth_stretch", 0.35)
+                put("lip_closure", 0.05)
+            })
+        }.toString()
+
+        val reportJson = PronunciationCoreBridge.analyzeWordPronunciation(evidenceJson)
+        val report = JSONObject(reportJson)
+
+        assertEquals("think", report.optString("target_word"))
+        assertTrue("Overall score should be valid", report.getInt("overall_score") in 0..100)
+        assertTrue(report.has("tongue_metrics"))
+        val tongueMetrics = report.getJSONObject("tongue_metrics")
+        assertTrue(tongueMetrics.has("tongue_height"))
+        assertTrue(tongueMetrics.has("tongue_backness"))
+
+        val phonemes = report.getJSONArray("phoneme_scores")
+        assertEquals(4, phonemes.length())
+
+        val theta = phonemes.getJSONObject(0)
+        assertEquals("θ", theta.getString("symbol"))
+        assertTrue(theta.getString("name").contains("清齿间擦音"))
+        assertTrue(theta.getJSONArray("action_cues").length() >= 2)
+    }
+
+    @Test
+    fun testPhonemeKnowledgeBaseCoverage() {
+        val kb = PronunciationCoreBridge.PHONEME_KNOWLEDGE_BASE
+        val requiredPhonemes = listOf(
+            // Vowels
+            "iː", "ɪ", "e", "æ", "ʌ", "ɜː", "ə", "uː", "ʊ", "ɔː", "ɑː", "ɒ",
+            "eɪ", "aɪ", "ɔɪ", "aʊ", "oʊ", "ɪə", "eə", "ʊə",
+            // Consonants
+            "p", "b", "t", "d", "k", "g", "f", "v", "θ", "ð", "s", "z", "ʃ", "ʒ", "h",
+            "tʃ", "dʒ", "m", "n", "ŋ", "l", "r", "w", "j"
+        )
+
+        for (sym in requiredPhonemes) {
+            assertTrue("Phoneme knowledge base must include $sym", kb.containsKey(sym))
+            val info = kb[sym]!!
+            assertTrue("IPA must not be empty for $sym", info.ipa.isNotEmpty())
+            assertTrue("Name must not be empty for $sym", info.name.isNotEmpty())
+            assertTrue("Standard action must not be empty for $sym", info.standardAction.isNotEmpty())
+            assertTrue("Error cause must not be empty for $sym", info.typicalErrorCause.isNotEmpty())
+            assertTrue("Action cues must have at least 2 cues for $sym", info.actionCues.size >= 2)
+        }
+    }
 }
