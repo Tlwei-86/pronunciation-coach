@@ -20,9 +20,28 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            // Use debug keystore for signed release builds
+            val debugKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
+            if (debugKeystore.exists()) {
+                storeFile = debugKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            // Android 15 displays 16KB ELF compatibility warning popups specifically
+            // for debuggable apps. Disabling debuggable suppresses this dialog.
+            isDebuggable = false
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -71,7 +90,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.face.detection)
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+    implementation(libs.onnxruntime.android)
     
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
