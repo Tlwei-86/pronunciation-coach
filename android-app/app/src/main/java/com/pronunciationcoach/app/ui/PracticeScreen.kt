@@ -31,6 +31,7 @@ import com.pronunciationcoach.app.R
 import com.pronunciationcoach.app.core.AcousticFeatureExtractor
 import com.pronunciationcoach.app.core.PronunciationCoreBridge
 import com.pronunciationcoach.app.core.TestArtifactPipeline
+import com.pronunciationcoach.app.core.OnnxAcousticEngine
 import com.pronunciationcoach.app.domain.MicrophoneAudioSource
 import com.pronunciationcoach.app.vision.LiveFaceMouthMetrics
 import com.pronunciationcoach.app.vision.RealFaceLandmarkAnalyzer
