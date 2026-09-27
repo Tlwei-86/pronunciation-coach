@@ -252,7 +252,7 @@ class PracticeViewModel(
             )
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(coroutineDispatcher) {
             activeAudioSource.startRecording()
             activeVideoSource.startCapture()
         }
@@ -267,7 +267,7 @@ class PracticeViewModel(
             )
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(coroutineDispatcher) {
             val audioData = activeAudioSource.stopRecording()
             val videoData = activeVideoSource.stopCapture()
 
@@ -276,7 +276,7 @@ class PracticeViewModel(
 
             _uiState.update { it.copy(hasUserRecording = true) }
 
-            evaluateAudioPcm(
+            evaluateAudioPcmInternal(
                 pcmData = audioData.pcmData,
                 jawOpen = videoData.averageJawOpen,
                 lipRoundness = videoData.averageLipRoundness
@@ -292,74 +292,82 @@ class PracticeViewModel(
         jawOpen: Float = _uiState.value.liveJawOpen,
         lipRoundness: Float = _uiState.value.liveLipRoundness
     ) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isEvaluating = true) }
+        viewModelScope.launch(coroutineDispatcher) {
+            evaluateAudioPcmInternal(pcmData, jawOpen, lipRoundness)
+        }
+    }
 
-            val targetWord = _uiState.value.targetWord
-            val targetIpa = _uiState.value.targetIpa
+    private suspend fun evaluateAudioPcmInternal(
+        pcmData: ByteArray,
+        jawOpen: Float,
+        lipRoundness: Float
+    ) {
+        _uiState.update { it.copy(isEvaluating = true) }
 
-            val result = withContext(Dispatchers.Default) {
-                // 1. Acoustic and temporal alignment
-                val segments = PhonemeTemporalAligner.alignWord(pcmData, targetWord)
-                val formants = AcousticFeatureExtractor.extractFormants(pcmData)
-                val acuity = AcousticFeatureExtractor.analyzePcmBuffer(pcmData)
+        val targetWord = _uiState.value.targetWord
+        val targetIpa = _uiState.value.targetIpa
 
-                // 2. Build multi-phoneme evidence JSON
-                val evidenceJson = JSONObject().apply {
-                    put("target_word", targetWord)
-                    put("targetWord", targetWord)
-                    put("target_ipa", targetIpa)
-                    put("targetIpa", targetIpa)
+        val result = withContext(coroutineDispatcher) {
+            // 1. Acoustic and temporal alignment
+            val segments = PhonemeTemporalAligner.alignWord(pcmData, targetWord)
+            val formants = AcousticFeatureExtractor.extractFormants(pcmData)
+            val acuity = AcousticFeatureExtractor.analyzePcmBuffer(pcmData)
 
-                    val phonemesArr = JSONArray()
-                    for (seg in segments) {
-                        val segFeatures = AcousticFeatureExtractor.analyzePhonemeCategory(seg.pcmChunk, seg.phoneme)
-                        val pObj = JSONObject().apply {
-                            put("symbol", seg.phoneme)
-                            put("phoneme", seg.phoneme)
-                            put("audio", JSONObject().apply {
-                                put("target_probability", (segFeatures.score / 100f).coerceIn(0.1f, 0.99f))
-                                put("f1_hz", formants.f1)
-                                put("f2_hz", formants.f2)
-                                put("duration_ms", seg.endMs - seg.startMs)
-                            })
-                            put("visual", JSONObject().apply {
-                                put("jaw_open", jawOpen)
-                                put("lip_roundness", lipRoundness)
-                            })
-                        }
-                        phonemesArr.put(pObj)
+            // 2. Build multi-phoneme evidence JSON
+            val evidenceJson = JSONObject().apply {
+                put("target_word", targetWord)
+                put("targetWord", targetWord)
+                put("target_ipa", targetIpa)
+                put("targetIpa", targetIpa)
+
+                val phonemesArr = JSONArray()
+                for (seg in segments) {
+                    val segFeatures = AcousticFeatureExtractor.analyzePhonemeCategory(seg.pcmChunk, seg.phoneme)
+                    val pObj = JSONObject().apply {
+                        put("symbol", seg.phoneme)
+                        put("phoneme", seg.phoneme)
+                        put("audio", JSONObject().apply {
+                            put("target_probability", (segFeatures.score / 100f).coerceIn(0.1f, 0.99f))
+                            put("f1_hz", formants.f1)
+                            put("f2_hz", formants.f2)
+                            put("duration_ms", seg.endMs - seg.startMs)
+                        })
+                        put("visual", JSONObject().apply {
+                            put("jaw_open", jawOpen)
+                            put("lip_roundness", lipRoundness)
+                        })
                     }
-                    put("phonemes", phonemesArr)
+                    phonemesArr.put(pObj)
+                }
+                put("phonemes", phonemesArr)
 
-                    put("audio", JSONObject().apply {
-                        put("target_probability", acuity.targetProb)
-                        put("f1_hz", formants.f1)
-                        put("f2_hz", formants.f2)
-                        put("duration_ms", (pcmData.size / 32).toLong())
-                    })
-                    put("visual", JSONObject().apply {
-                        put("jaw_open", jawOpen)
-                        put("lip_roundness", lipRoundness)
-                    })
-                }.toString()
+                put("audio", JSONObject().apply {
+                    put("target_probability", acuity.targetProb)
+                    put("f1_hz", formants.f1)
+                    put("f2_hz", formants.f2)
+                    put("duration_ms", (pcmData.size / 32).toLong())
+                })
+                put("visual", JSONObject().apply {
+                    put("jaw_open", jawOpen)
+                    put("lip_roundness", lipRoundness)
+                })
+            }.toString()
 
-                // 3. Score via PronunciationCoreBridge
-                val resultJson = PronunciationCoreBridge.analyzeWordPronunciation(evidenceJson)
-                ReasoningResult.fromJson(resultJson)
-            }
+            // 3. Score via PronunciationCoreBridge
+            val resultJson = PronunciationCoreBridge.analyzeWordPronunciation(evidenceJson)
+            ReasoningResult.fromJson(resultJson)
+        }
 
-            // Determine lowest-scoring phoneme as default selected phoneme
-            val lowestPhoneme = result.phonemeEvaluations.minByOrNull { it.score }
+        // Determine lowest-scoring phoneme as default selected phoneme
+        val lowestPhoneme = result.phonemeEvaluations.minByOrNull { it.score }
 
-            _uiState.update {
-                it.copy(
-                    isEvaluating = false,
-                    evaluationResult = result,
-                    selectedPhonemeSymbol = lowestPhoneme?.symbol ?: result.phonemeEvaluations.firstOrNull()?.symbol,
-                    statusMessage = "评测完成: 得分 ${result.overallScore} 分"
-                )
-            }
+        _uiState.update {
+            it.copy(
+                isEvaluating = false,
+                evaluationResult = result,
+                selectedPhonemeSymbol = lowestPhoneme?.symbol ?: result.phonemeEvaluations.firstOrNull()?.symbol,
+                statusMessage = "评测完成: 得分 ${result.overallScore} 分"
+            )
         }
     }
 
@@ -390,7 +398,7 @@ class PracticeViewModel(
             userAudioPlaybackEngine?.saveRecording(audioData.pcmData)
             _uiState.update { it.copy(hasUserRecording = true) }
 
-            evaluateAudioPcm(
+            evaluateAudioPcmInternal(
                 pcmData = audioData.pcmData,
                 jawOpen = videoData.averageJawOpen,
                 lipRoundness = videoData.averageLipRoundness
@@ -421,7 +429,7 @@ class PracticeViewModel(
             userAudioPlaybackEngine?.saveRecording(audioData.pcmData)
             _uiState.update { it.copy(hasUserRecording = true) }
 
-            evaluateAudioPcm(
+            evaluateAudioPcmInternal(
                 pcmData = audioData.pcmData,
                 jawOpen = videoData.averageJawOpen,
                 lipRoundness = videoData.averageLipRoundness
