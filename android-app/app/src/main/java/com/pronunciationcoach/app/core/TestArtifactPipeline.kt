@@ -52,6 +52,9 @@ object TestArtifactPipeline {
                 return@suspendCancellableCoroutine
             }
 
+            val bWidth = bitmap.width
+            val bHeight = bitmap.height
+
             val image = InputImage.fromBitmap(bitmap, 0)
             val options = FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
@@ -65,16 +68,39 @@ object TestArtifactPipeline {
                 .addOnSuccessListener { faces ->
                     if (faces.isEmpty()) {
                         cont.resume(
-                            LiveFaceMouthMetrics(0.40f, 0.12f, 0.45f, false, "未在测试图片中检测到面部")
+                            LiveFaceMouthMetrics(
+                                jawOpen = 0.40f,
+                                lipRoundness = 0.12f,
+                                mouthWidthNormalized = 0.45f,
+                                isFaceDetected = false,
+                                statusText = "未在测试图片中检测到面部",
+                                sourceImageWidth = bWidth,
+                                sourceImageHeight = bHeight,
+                                isFrontCamera = false
+                            )
                         )
                     } else {
-                        val metrics = calculateMetricsFromFace(faces[0])
+                        val metrics = calculateMetricsFromFace(
+                            face = faces[0],
+                            imageWidth = bWidth,
+                            imageHeight = bHeight,
+                            isFrontCamera = false
+                        )
                         cont.resume(metrics)
                     }
                 }
                 .addOnFailureListener { e ->
                     cont.resume(
-                        LiveFaceMouthMetrics(0.40f, 0.12f, 0.45f, false, "Error: ${e.message}")
+                        LiveFaceMouthMetrics(
+                            jawOpen = 0.40f,
+                            lipRoundness = 0.12f,
+                            mouthWidthNormalized = 0.45f,
+                            isFaceDetected = false,
+                            statusText = "Error: ${e.message}",
+                            sourceImageWidth = bWidth,
+                            sourceImageHeight = bHeight,
+                            isFrontCamera = false
+                        )
                     )
                 }
         } catch (e: Exception) {
@@ -84,7 +110,12 @@ object TestArtifactPipeline {
         }
     }
 
-    private fun calculateMetricsFromFace(face: Face): LiveFaceMouthMetrics {
+    private fun calculateMetricsFromFace(
+        face: Face,
+        imageWidth: Int = 0,
+        imageHeight: Int = 0,
+        isFrontCamera: Boolean = false
+    ): LiveFaceMouthMetrics {
         val mouthBottom = face.getLandmark(FaceLandmark.MOUTH_BOTTOM)?.position
         val mouthLeft = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position
         val mouthRight = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
@@ -120,7 +151,10 @@ object TestArtifactPipeline {
                 mouthWidthNormalized = normalizedWidth,
                 isFaceDetected = true,
                 statusText = status,
-                lipContourPoints = lipPoints
+                lipContourPoints = lipPoints,
+                sourceImageWidth = imageWidth,
+                sourceImageHeight = imageHeight,
+                isFrontCamera = isFrontCamera
             )
         } else {
             return LiveFaceMouthMetrics(
@@ -129,7 +163,10 @@ object TestArtifactPipeline {
                 mouthWidthNormalized = 0.45f,
                 isFaceDetected = true,
                 statusText = "关键点部分被遮挡",
-                lipContourPoints = lipPoints
+                lipContourPoints = lipPoints,
+                sourceImageWidth = imageWidth,
+                sourceImageHeight = imageHeight,
+                isFrontCamera = isFrontCamera
             )
         }
     }

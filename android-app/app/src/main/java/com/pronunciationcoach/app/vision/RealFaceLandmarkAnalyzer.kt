@@ -19,7 +19,10 @@ data class LiveFaceMouthMetrics(
     val mouthWidthNormalized: Float,
     val isFaceDetected: Boolean,
     val statusText: String,
-    val lipContourPoints: List<android.graphics.PointF> = emptyList()
+    val lipContourPoints: List<android.graphics.PointF> = emptyList(),
+    val sourceImageWidth: Int = 0,
+    val sourceImageHeight: Int = 0,
+    val isFrontCamera: Boolean = true
 )
 
 class RealFaceLandmarkAnalyzer(
@@ -49,6 +52,10 @@ class RealFaceLandmarkAnalyzer(
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
         val image = InputImage.fromMediaImage(mediaImage, rotationDegrees)
 
+        val isRotated = rotationDegrees == 90 || rotationDegrees == 270
+        val imgWidth = if (isRotated) imageProxy.height else imageProxy.width
+        val imgHeight = if (isRotated) imageProxy.width else imageProxy.height
+
         detector.process(image)
             .addOnSuccessListener { faces ->
                 if (faces.isEmpty()) {
@@ -59,12 +66,20 @@ class RealFaceLandmarkAnalyzer(
                             mouthWidthNormalized = 0.45f,
                             isFaceDetected = false,
                             statusText = "未检测到人脸，请正对屏幕",
-                            lipContourPoints = emptyList()
+                            lipContourPoints = emptyList(),
+                            sourceImageWidth = imgWidth,
+                            sourceImageHeight = imgHeight,
+                            isFrontCamera = true
                         )
                     )
                 } else {
                     val face = faces[0]
-                    val metrics = calculateMouthMetrics(face)
+                    val metrics = calculateMouthMetrics(
+                        face = face,
+                        imageWidth = imgWidth,
+                        imageHeight = imgHeight,
+                        isFrontCamera = true
+                    )
                     onMetricsUpdated(metrics)
                 }
             }
@@ -77,7 +92,12 @@ class RealFaceLandmarkAnalyzer(
             }
     }
 
-    private fun calculateMouthMetrics(face: Face): LiveFaceMouthMetrics {
+    private fun calculateMouthMetrics(
+        face: Face,
+        imageWidth: Int = 0,
+        imageHeight: Int = 0,
+        isFrontCamera: Boolean = true
+    ): LiveFaceMouthMetrics {
         val mouthBottom = face.getLandmark(FaceLandmark.MOUTH_BOTTOM)?.position
         val mouthLeft = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position
         val mouthRight = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
@@ -118,7 +138,10 @@ class RealFaceLandmarkAnalyzer(
                 mouthWidthNormalized = normalizedWidth,
                 isFaceDetected = true,
                 statusText = status,
-                lipContourPoints = lipPoints
+                lipContourPoints = lipPoints,
+                sourceImageWidth = imageWidth,
+                sourceImageHeight = imageHeight,
+                isFrontCamera = isFrontCamera
             )
         } else {
             // Face detected but landmarks partially occluded
@@ -128,7 +151,10 @@ class RealFaceLandmarkAnalyzer(
                 mouthWidthNormalized = 0.45f,
                 isFaceDetected = true,
                 statusText = "已检测到面部 (微调光线与距离)",
-                lipContourPoints = lipPoints
+                lipContourPoints = lipPoints,
+                sourceImageWidth = imageWidth,
+                sourceImageHeight = imageHeight,
+                isFrontCamera = isFrontCamera
             )
         }
     }
