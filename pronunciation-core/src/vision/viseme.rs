@@ -6,16 +6,16 @@ use serde::{Deserialize, Serialize};
 /// High-level Viseme classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VisemeClass {
-    Bilabial,         // /p/, /b/, /m/
-    Labiodental,      // /f/, /v/
-    DentalInterdental,// /θ/, /ð/
-    Alveolar,         // /t/, /d/, /s/, /z/, /n/, /l/
-    PalatoAlveolar,   // /ʃ/, /ʒ/, /tʃ/, /dʒ/
-    Velar,            // /k/, /g/, /ŋ/
-    OpenVowel,        // /ɑ/, /æ/
-    MidCentralVowel,  // /ʌ/, /ə/
-    CloseFrontVowel,  // /i/, /ɪ/
-    CloseBackVowel,   // /u/, /ʊ/
+    Bilabial,          // /p/, /b/, /m/
+    Labiodental,       // /f/, /v/
+    DentalInterdental, // /θ/, /ð/
+    Alveolar,          // /t/, /d/, /s/, /z/, /n/, /l/
+    PalatoAlveolar,    // /ʃ/, /ʒ/, /tʃ/, /dʒ/
+    Velar,             // /k/, /g/, /ŋ/
+    OpenVowel,         // /ɑ/, /æ/
+    MidCentralVowel,   // /ʌ/, /ə/
+    CloseFrontVowel,   // /i/, /ɪ/
+    CloseBackVowel,    // /u/, /ʊ/
     Neutral,
 }
 
@@ -113,10 +113,8 @@ pub fn evaluate_viseme(phoneme: &str, measured: &MouthGeometry) -> VisemeMatchRe
                 issues.push("Insufficient mouth stretch/smile for /i/".to_string());
             }
         }
-        "u" => {
-            if measured.lip_roundness < 0.50 {
-                issues.push("Lips should be tightly rounded for /u/".to_string());
-            }
+        "u" if measured.lip_roundness < 0.50 => {
+            issues.push("Lips should be tightly rounded for /u/".to_string());
         }
         _ => {}
     }
@@ -159,7 +157,7 @@ mod tests {
     #[test]
     fn test_velar_visual_weight() {
         assert_eq!(phoneme_visual_weight("k"), 0.05);
+        assert_eq!(phoneme_visual_weight("g"), 0.05);
         assert_eq!(phoneme_visual_weight("ŋ"), 0.05);
-        assert_eq!(phoneme_visual_weight("f"), 0.35);
     }
 }

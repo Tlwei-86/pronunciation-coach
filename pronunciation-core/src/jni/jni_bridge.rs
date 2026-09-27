@@ -96,14 +96,8 @@ pub extern "system" fn Java_com_pronunciationcoach_app_core_PronunciationCoreBri
     f1: jfloat,
     f2: jfloat,
 ) -> jstring {
-    let word_result = score_funk_with_tongue(
-        target_prob,
-        confusion_prob,
-        jaw_open,
-        lip_roundness,
-        f1,
-        f2,
-    );
+    let word_result =
+        score_funk_with_tongue(target_prob, confusion_prob, jaw_open, lip_roundness, f1, f2);
 
     let response = match serde_json::to_string(&word_result) {
         Ok(json) => json,

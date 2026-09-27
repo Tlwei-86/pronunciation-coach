@@ -29,13 +29,8 @@ pub fn evaluate_evidence_locally(evidence: &EvidenceJson) -> DiagnosisReport {
         .iter()
         .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    let likely_confusion = top_confusion.and_then(|(sym, &p)| {
-        if p >= 0.15 {
-            Some(sym.clone())
-        } else {
-            None
-        }
-    });
+    let likely_confusion =
+        top_confusion.and_then(|(sym, &p)| if p >= 0.15 { Some(sym.clone()) } else { None });
 
     // Rule-based diagnostic deduction
     let (diagnosis, needs_repeat, jev_confidence) = match (
@@ -44,24 +39,22 @@ pub fn evaluate_evidence_locally(evidence: &EvidenceJson) -> DiagnosisReport {
         evidence.visual.jaw_open,
     ) {
         // Rule 1: /ʌ/ shifted to /ɑ/ (excessive jaw opening or acoustic confusion)
-        ("ʌ", conf, jaw) if (conf == Some("ɑ") || jaw > 0.65) && target_score < 78 => {
-            (
-                DeepSeekDiagnosis {
-                    primary_issue: "vowel_quality".to_string(),
-                    likely_confusion: Some("ɑ".to_string()),
-                    cause: "The vowel is too open and shifts toward /ɑ/.".to_string(),
-                    visual_support: "Jaw opening is larger than desired.".to_string(),
-                    correction: vec![
-                        "Reduce jaw opening slightly".to_string(),
-                        "Keep the tongue more central and relaxed".to_string(),
-                        "Practice /ʌ/ alone before returning to the word".to_string(),
-                    ],
-                    next_exercise: "minimal_pair_ʌ_ɑ".to_string(),
-                },
-                false,
-                0.88f32,
-            )
-        }
+        ("ʌ", conf, jaw) if (conf == Some("ɑ") || jaw > 0.65) && target_score < 78 => (
+            DeepSeekDiagnosis {
+                primary_issue: "vowel_quality".to_string(),
+                likely_confusion: Some("ɑ".to_string()),
+                cause: "The vowel is too open and shifts toward /ɑ/.".to_string(),
+                visual_support: "Jaw opening is larger than desired.".to_string(),
+                correction: vec![
+                    "Reduce jaw opening slightly".to_string(),
+                    "Keep the tongue more central and relaxed".to_string(),
+                    "Practice /ʌ/ alone before returning to the word".to_string(),
+                ],
+                next_exercise: "minimal_pair_ʌ_ɑ".to_string(),
+            },
+            false,
+            0.88f32,
+        ),
         // Rule 2: Final velar stop /k/ weak
         ("k", _, _) if target_score < 75 => (
             DeepSeekDiagnosis {
@@ -114,10 +107,16 @@ pub fn evaluate_evidence_locally(evidence: &EvidenceJson) -> DiagnosisReport {
                 DeepSeekDiagnosis {
                     primary_issue: "articulatory_precision".to_string(),
                     likely_confusion: likely_confusion.clone(),
-                    cause: format!("Pronunciation deviated slightly from target /{}/.", evidence.target_phoneme),
+                    cause: format!(
+                        "Pronunciation deviated slightly from target /{}/.",
+                        evidence.target_phoneme
+                    ),
                     visual_support: format!("Mouth opening: {:.2}.", evidence.visual.jaw_open),
                     correction: vec![
-                        format!("Listen closely to target phoneme /{}/", evidence.target_phoneme),
+                        format!(
+                            "Listen closely to target phoneme /{}/",
+                            evidence.target_phoneme
+                        ),
                         "Focus on matching mouth opening and tongue height".to_string(),
                     ],
                     next_exercise: format!("drill_{}", evidence.target_phoneme),

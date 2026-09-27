@@ -79,7 +79,12 @@ pub fn get_word_rubric(word: &str) -> WordRubric {
         ),
         _ => {
             // Default generic fallback: single phoneme target
-            WordRubric::new(word, vec![word.to_string()], vec![1.0], vec![word.to_string()])
+            WordRubric::new(
+                word,
+                vec![word.to_string()],
+                vec![1.0],
+                vec![word.to_string()],
+            )
         }
     }
 }

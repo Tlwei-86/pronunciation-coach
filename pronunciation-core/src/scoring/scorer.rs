@@ -175,7 +175,10 @@ pub fn score_word(
         } else {
             ""
         };
-        summary.push_str(&format!("/{:^3}/               {:>2}{}\n", p.phoneme, p.score, tag));
+        summary.push_str(&format!(
+            "/{:^3}/               {:>2}{}\n",
+            p.phoneme, p.score, tag
+        ));
     }
     summary.push_str(&format!(
         "\n声音准确度           {}\n口型准确度           {}\n节奏                 {}\n重音                 {}\n系统置信度           {}\n",
@@ -341,7 +344,10 @@ mod tests {
             .iter()
             .find(|p| p.phoneme == "ʌ")
             .expect("Should contain /ʌ/ score");
-        assert!(caret.is_primary_issue, "/ʌ/ should be identified as primary issue");
+        assert!(
+            caret.is_primary_issue,
+            "/ʌ/ should be identified as primary issue"
+        );
         assert!(
             caret.score >= 45 && caret.score <= 68,
             "Expected /ʌ/ score in 45..=68, got {}",

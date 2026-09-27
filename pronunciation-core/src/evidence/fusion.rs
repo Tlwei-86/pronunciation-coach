@@ -133,7 +133,10 @@ mod tests {
         };
 
         let fused = fuse_evidence("ʌ", &audio, &visual);
-        assert_eq!(fused.congruence, MultimodalCongruence::CorroboratedDeviation);
+        assert_eq!(
+            fused.congruence,
+            MultimodalCongruence::CorroboratedDeviation
+        );
         assert_eq!(fused.primary_confusion.as_deref(), Some("ɑ"));
         assert!(!fused.visual_issues.is_empty());
     }

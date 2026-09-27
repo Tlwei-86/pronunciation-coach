@@ -43,7 +43,8 @@ pub fn evaluate_word_confidence(fused_phonemes: &[FusedPhonemeEvidence]) -> Conf
         match f.congruence {
             MultimodalCongruence::VisualConflict => conflict_count += 1,
             MultimodalCongruence::Ambiguous => ambiguous_count += 1,
-            MultimodalCongruence::CorroboratedPass | MultimodalCongruence::CorroboratedDeviation => {
+            MultimodalCongruence::CorroboratedPass
+            | MultimodalCongruence::CorroboratedDeviation => {
                 high_confidence_count += 1;
             }
             MultimodalCongruence::AcousticOnlyDeviation => {

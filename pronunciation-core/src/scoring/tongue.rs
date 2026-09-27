@@ -49,42 +49,55 @@ pub fn evaluate_tongue_position(
     // - backness > 0.65: 舌位过度靠前 (ACTION_TONGUE_TOO_FRONT)
     // - height < 0.30: 舌位过度下沉压低 (ACTION_JAW_TONGUE_LOW)
     // - height > 0.70: 舌位过高 (ACTION_TONGUE_TOO_HIGH)
-    let dev_h_low = if tongue_height < 0.30 { 0.30 - tongue_height } else { 0.0 };
-    let dev_h_high = if tongue_height > 0.70 { tongue_height - 0.70 } else { 0.0 };
-    let dev_b_retracted = if tongue_backness < 0.35 { 0.35 - tongue_backness } else { 0.0 };
-    let dev_b_fronted = if tongue_backness > 0.65 { tongue_backness - 0.65 } else { 0.0 };
-
-    let (action_code, articulatory_guidance) = if dev_h_low > 0.0
-        || dev_h_high > 0.0
-        || dev_b_retracted > 0.0
-        || dev_b_fronted > 0.0
-    {
-        // Select most severe deviation
-        let mut max_dev = dev_h_low;
-        let mut code = ACTION_JAW_TONGUE_LOW;
-        let mut guidance = "舌头压得过低且下巴过松，请稍微收起舌底，舌尖轻触下齿龈。";
-
-        if dev_h_high > max_dev {
-            max_dev = dev_h_high;
-            code = ACTION_TONGUE_TOO_HIGH;
-            guidance = "舌面抬得过高，声音含在口中，请略微下压舌中部，释放气流。";
-        }
-        if dev_b_retracted > max_dev {
-            max_dev = dev_b_retracted;
-            code = ACTION_TONGUE_RETRACTED;
-            guidance = "口型虽然合适，但舌根过度向咽壁收缩，请将舌面稍微向前平移放松。";
-        }
-        if dev_b_fronted > max_dev {
-            code = ACTION_TONGUE_TOO_FRONT;
-            guidance = "舌头向前拱起过多，请放松舌身，让舌面保持在口腔正中央。";
-        }
-        (code, guidance.to_string())
+    let dev_h_low = if tongue_height < 0.30 {
+        0.30 - tongue_height
     } else {
-        (
-            ACTION_PERFECT,
-            "完美发音！口型适中，舌位保持在标准半低央位置。".to_string(),
-        )
+        0.0
     };
+    let dev_h_high = if tongue_height > 0.70 {
+        tongue_height - 0.70
+    } else {
+        0.0
+    };
+    let dev_b_retracted = if tongue_backness < 0.35 {
+        0.35 - tongue_backness
+    } else {
+        0.0
+    };
+    let dev_b_fronted = if tongue_backness > 0.65 {
+        tongue_backness - 0.65
+    } else {
+        0.0
+    };
+
+    let (action_code, articulatory_guidance) =
+        if dev_h_low > 0.0 || dev_h_high > 0.0 || dev_b_retracted > 0.0 || dev_b_fronted > 0.0 {
+            // Select most severe deviation
+            let mut max_dev = dev_h_low;
+            let mut code = ACTION_JAW_TONGUE_LOW;
+            let mut guidance = "舌头压得过低且下巴过松，请稍微收起舌底，舌尖轻触下齿龈。";
+
+            if dev_h_high > max_dev {
+                max_dev = dev_h_high;
+                code = ACTION_TONGUE_TOO_HIGH;
+                guidance = "舌面抬得过高，声音含在口中，请略微下压舌中部，释放气流。";
+            }
+            if dev_b_retracted > max_dev {
+                max_dev = dev_b_retracted;
+                code = ACTION_TONGUE_RETRACTED;
+                guidance = "口型虽然合适，但舌根过度向咽壁收缩，请将舌面稍微向前平移放松。";
+            }
+            if dev_b_fronted > max_dev {
+                code = ACTION_TONGUE_TOO_FRONT;
+                guidance = "舌头向前拱起过多，请放松舌身，让舌面保持在口腔正中央。";
+            }
+            (code, guidance.to_string())
+        } else {
+            (
+                ACTION_PERFECT,
+                "完美发音！口型适中，舌位保持在标准半低央位置。".to_string(),
+            )
+        };
 
     // Calculate compliance score [0, 100]
     // Ideal range for /ʌ/: height in [0.45, 0.60], backness in [0.40, 0.55]
