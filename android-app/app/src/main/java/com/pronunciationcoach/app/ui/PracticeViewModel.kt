@@ -371,58 +371,62 @@ class PracticeViewModel(
      * Automated test for Canonical /fʌŋk/ test WAV.
      */
     fun runCanonicalTestWav() {
-        _uiState.update {
-            it.copy(
-                targetWord = "funk",
-                targetIpa = "/fʌŋk/",
-                selectedCategory = "唇齿擦音 /f, v/",
-                isEvaluating = true
+        viewModelScope.launch(coroutineDispatcher) {
+            _uiState.update {
+                it.copy(
+                    targetWord = "funk",
+                    targetIpa = "/fʌŋk/",
+                    selectedCategory = "唇齿擦音 /f, v/",
+                    isEvaluating = true
+                )
+            }
+            val audioSrc = WavFileAudioSource.createCanonicalFunk()
+            val videoSrc = VideoFileSource.createCanonicalFunkVisual()
+            audioSrc.startRecording()
+            videoSrc.startCapture()
+            val audioData = audioSrc.stopRecording()
+            val videoData = videoSrc.stopCapture()
+
+            userAudioPlaybackEngine?.saveRecording(audioData.pcmData)
+            _uiState.update { it.copy(hasUserRecording = true) }
+
+            evaluateAudioPcm(
+                pcmData = audioData.pcmData,
+                jawOpen = videoData.averageJawOpen,
+                lipRoundness = videoData.averageLipRoundness
             )
         }
-        val audioSrc = WavFileAudioSource.createCanonicalFunk()
-        val videoSrc = VideoFileSource.createCanonicalFunkVisual()
-        audioSrc.startRecording()
-        videoSrc.startCapture()
-        val audioData = audioSrc.stopRecording()
-        val videoData = videoSrc.stopCapture()
-
-        userAudioPlaybackEngine?.saveRecording(audioData.pcmData)
-        _uiState.update { it.copy(hasUserRecording = true) }
-
-        evaluateAudioPcm(
-            pcmData = audioData.pcmData,
-            jawOpen = videoData.averageJawOpen,
-            lipRoundness = videoData.averageLipRoundness
-        )
     }
 
     /**
      * Automated test for Confused /fɑːŋk/ test WAV.
      */
     fun runConfusedTestWav() {
-        _uiState.update {
-            it.copy(
-                targetWord = "funk",
-                targetIpa = "/fʌŋk/",
-                selectedCategory = "唇齿擦音 /f, v/",
-                isEvaluating = true
+        viewModelScope.launch(coroutineDispatcher) {
+            _uiState.update {
+                it.copy(
+                    targetWord = "funk",
+                    targetIpa = "/fʌŋk/",
+                    selectedCategory = "唇齿擦音 /f, v/",
+                    isEvaluating = true
+                )
+            }
+            val audioSrc = WavFileAudioSource.createConfusedAhFunk()
+            val videoSrc = VideoFileSource.createConfusedAhVisual()
+            audioSrc.startRecording()
+            videoSrc.startCapture()
+            val audioData = audioSrc.stopRecording()
+            val videoData = videoSrc.stopCapture()
+
+            userAudioPlaybackEngine?.saveRecording(audioData.pcmData)
+            _uiState.update { it.copy(hasUserRecording = true) }
+
+            evaluateAudioPcm(
+                pcmData = audioData.pcmData,
+                jawOpen = videoData.averageJawOpen,
+                lipRoundness = videoData.averageLipRoundness
             )
         }
-        val audioSrc = WavFileAudioSource.createConfusedAhFunk()
-        val videoSrc = VideoFileSource.createConfusedAhVisual()
-        audioSrc.startRecording()
-        videoSrc.startCapture()
-        val audioData = audioSrc.stopRecording()
-        val videoData = videoSrc.stopCapture()
-
-        userAudioPlaybackEngine?.saveRecording(audioData.pcmData)
-        _uiState.update { it.copy(hasUserRecording = true) }
-
-        evaluateAudioPcm(
-            pcmData = audioData.pcmData,
-            jawOpen = videoData.averageJawOpen,
-            lipRoundness = videoData.averageLipRoundness
-        )
     }
 
     override fun onCleared() {
