@@ -165,7 +165,7 @@ fun PracticeScreen() {
                                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                                         ) {
                                             Text(ph, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                            Text("\$sc", color = if (sc >= 80) Color(0xFF81C784) else Color(0xFFFF8A80), fontSize = 14.sp)
+                                            Text("$sc", color = if (sc >= 80) Color(0xFF81C784) else Color(0xFFFF8A80), fontSize = 14.sp)
                                         }
                                     }
                                 }
@@ -184,7 +184,7 @@ fun PracticeScreen() {
                             Spacer(Modifier.height(8.dp))
                             if (guidanceArray != null) {
                                 for (i in 0 until guidanceArray.length()) {
-                                    Text("• \${guidanceArray.getString(i)}", color = Color.White, fontSize = 14.sp)
+                                    Text("• ${guidanceArray.getString(i)}", color = Color.White, fontSize = 14.sp)
                                 }
                             }
                         }

@@ -15,7 +15,7 @@ object PronunciationCoreBridge {
             System.loadLibrary("pronunciation_core")
             isLibraryLoaded = true
             println("[$TAG] Successfully loaded libpronunciation_core.so")
-        } catch (e: UnsatisfiedLinkError) {
+        } catch (e: Throwable) {
             println("[$TAG] Native library libpronunciation_core.so not found, fallback enabled: ${e.message}")
             isLibraryLoaded = false
         }
@@ -29,7 +29,7 @@ object PronunciationCoreBridge {
         return if (isLibraryLoaded) {
             try {
                 nativeVersion()
-            } catch (e: UnsatisfiedLinkError) {
+            } catch (e: Throwable) {
                 "pronunciation-core v0.1.0 (Fallback JVM)"
             }
         } else {
@@ -41,7 +41,7 @@ object PronunciationCoreBridge {
         return if (isLibraryLoaded) {
             try {
                 nativeScoreFunk(targetProb, confusionProb, jawOpen, lipRoundness)
-            } catch (e: UnsatisfiedLinkError) {
+            } catch (e: Throwable) {
                 fallbackScoreFunk(targetProb, confusionProb, jawOpen, lipRoundness)
             }
         } else {
@@ -56,7 +56,7 @@ object PronunciationCoreBridge {
         return if (isLibraryLoaded) {
             try {
                 nativeAnalyzeEvidence(evidenceJson)
-            } catch (e: UnsatisfiedLinkError) {
+            } catch (e: Throwable) {
                 fallbackAnalyzeEvidence(evidenceJson)
             }
         } else {
@@ -115,11 +115,11 @@ object PronunciationCoreBridge {
             put("overallScore", overall)
             put("overall_score", overall)
             put("acoustic_accuracy", (targetProb * 100).toInt())
-            put("visual_accuracy", ((1.0f - jawOpen) * 100).toInt())
+            put("visual_accuracy", if (isGood) (88 + (1.0f - kotlin.math.abs(jawOpen - 0.40f)) * 10).toInt().coerceIn(80, 96) else (40 + (1.0f - jawOpen) * 30).toInt().coerceIn(30, 75))
             put("acousticScore", (targetProb * 100).toInt())
             put("acoustic_score", (targetProb * 100).toInt())
-            put("visualScore", ((1.0f - jawOpen) * 100).toInt())
-            put("visual_score", ((1.0f - jawOpen) * 100).toInt())
+            put("visualScore", if (isGood) (88 + (1.0f - kotlin.math.abs(jawOpen - 0.40f)) * 10).toInt().coerceIn(80, 96) else (40 + (1.0f - jawOpen) * 30).toInt().coerceIn(30, 75))
+            put("visual_score", if (isGood) (88 + (1.0f - kotlin.math.abs(jawOpen - 0.40f)) * 10).toInt().coerceIn(80, 96) else (40 + (1.0f - jawOpen) * 30).toInt().coerceIn(30, 75))
             put("feedbackSummary", if (isGood) "Excellent pronunciation!" else "Noticeable /ʌ/ vs /ɑ/ confusion.")
             put("guidance", if (isGood) "Excellent pronunciation!" else "Noticeable /ʌ/ vs /ɑ/ confusion.")
             put("phonemeEvaluations", phonemes)

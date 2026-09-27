@@ -38,17 +38,32 @@ data class PhonemeEvaluation(
 
     companion object {
         fun fromJsonObject(obj: JSONObject): PhonemeEvaluation {
+            val sym = if (obj.has("symbol")) obj.optString("symbol") else obj.optString("phoneme", "")
+            val sc = obj.optInt("score", 0)
+            val ipaStr = if (obj.has("ipa")) obj.optString("ipa") else "/$sym/"
+            val defaultStatus = if (sc >= 80) EvaluationStatus.GOOD else EvaluationStatus.WARNING
+            val status = try {
+                if (obj.has("status")) EvaluationStatus.valueOf(obj.optString("status")) else defaultStatus
+            } catch (e: Exception) {
+                defaultStatus
+            }
+            val noteStr = when {
+                !obj.isNull("note") -> obj.optString("note")
+                !obj.isNull("notes") -> obj.optString("notes")
+                else -> null
+            }
+            val detected = when {
+                !obj.isNull("detectedPhoneme") -> obj.optString("detectedPhoneme")
+                !obj.isNull("detected_phoneme") -> obj.optString("detected_phoneme")
+                else -> null
+            }
             return PhonemeEvaluation(
-                symbol = obj.optString("symbol", ""),
-                ipa = obj.optString("ipa", ""),
-                score = obj.optInt("score", 0),
-                status = try {
-                    EvaluationStatus.valueOf(obj.optString("status", "GOOD"))
-                } catch (e: Exception) {
-                    EvaluationStatus.GOOD
-                },
-                detectedPhoneme = if (obj.isNull("detectedPhoneme")) null else obj.optString("detectedPhoneme"),
-                note = if (obj.isNull("note")) null else obj.optString("note"),
+                symbol = sym,
+                ipa = ipaStr,
+                score = sc,
+                status = status,
+                detectedPhoneme = detected,
+                note = noteStr,
                 visualDeviation = if (obj.isNull("visualDeviation")) null else obj.optString("visualDeviation")
             )
         }
@@ -191,7 +206,7 @@ data class ReasoningResult(
         fun fromJson(jsonStr: String): ReasoningResult {
             val obj = JSONObject(jsonStr)
             val phonemes = mutableListOf<PhonemeEvaluation>()
-            val phonemesArr = obj.optJSONArray("phonemeEvaluations")
+            val phonemesArr = obj.optJSONArray("phonemeEvaluations") ?: obj.optJSONArray("phoneme_scores")
             if (phonemesArr != null) {
                 for (i in 0 until phonemesArr.length()) {
                     phonemes.add(PhonemeEvaluation.fromJsonObject(phonemesArr.getJSONObject(i)))
@@ -204,15 +219,43 @@ data class ReasoningResult(
                     tips.add(tipsArr.getString(i))
                 }
             }
+            val overall = when {
+                obj.has("overallScore") -> obj.optInt("overallScore")
+                obj.has("overall_score") -> obj.optInt("overall_score")
+                else -> 0
+            }
+            val acoustic = when {
+                obj.has("acousticScore") -> obj.optInt("acousticScore")
+                obj.has("acoustic_accuracy") -> obj.optInt("acoustic_accuracy")
+                obj.has("acoustic_score") -> obj.optInt("acoustic_score")
+                else -> 0
+            }
+            val visual = when {
+                obj.has("visualScore") -> obj.optInt("visualScore")
+                obj.has("visual_accuracy") -> obj.optInt("visual_accuracy")
+                obj.has("visual_score") -> obj.optInt("visual_score")
+                else -> 0
+            }
+            val summary = when {
+                obj.has("feedbackSummary") -> obj.optString("feedbackSummary")
+                obj.has("guidance") -> obj.optString("guidance")
+                obj.has("summary_text") -> obj.optString("summary_text")
+                else -> ""
+            }
+            val confusion = when {
+                !obj.isNull("detectedConfusion") -> obj.optString("detectedConfusion")
+                !obj.isNull("detected_confusion") -> obj.optString("detected_confusion")
+                else -> null
+            }
             return ReasoningResult(
-                overallScore = obj.optInt("overallScore", 0),
-                acousticScore = obj.optInt("acousticScore", 0),
-                visualScore = obj.optInt("visualScore", 0),
+                overallScore = overall,
+                acousticScore = acoustic,
+                visualScore = visual,
                 phonemeEvaluations = phonemes,
-                feedbackSummary = obj.optString("feedbackSummary", ""),
+                feedbackSummary = summary,
                 actionableTips = tips,
-                providerUsed = obj.optString("providerUsed", "unknown"),
-                detectedConfusion = if (obj.isNull("detectedConfusion")) null else obj.optString("detectedConfusion")
+                providerUsed = obj.optString("providerUsed", "Pronunciation Core Engine"),
+                detectedConfusion = confusion
             )
         }
     }

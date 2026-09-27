@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>多模态英语发音教练 - Web 交互体验演示</title>
+  <style>
+    :root {
+      --bg-color: #12121A;
+      --card-bg: #1B1B26;
+      --card-border: #2A2A3C;
+      --primary-blue: #4E95FF;
+      --success-green: #4CAF50;
+      --warning-red: #FF5252;
+      --warning-amber: #FFA726;
+      --text-muted: #8E8EA0;
+      --text-main: #FFFFFF;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: #0B0B10;
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .phone-container {
+      width: 100%;
+      max-width: 420px;
+      background-color: var(--bg-color);
+      border-radius: 36px;
+      border: 4px solid #282838;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .top-bar {
+      background-color: #1E1E2C;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #2D2D40;
+    }
+    .top-bar h1 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .badge-v {
+      font-size: 11px;
+      background: rgba(78, 149, 255, 0.2);
+      color: var(--primary-blue);
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    .content-area {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-height: 820px;
+      overflow-y: auto;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .word-card {
+      text-align: center;
+      padding: 20px 16px;
+    }
+    .word-title {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .word-main {
+      font-size: 38px;
+      font-weight: 800;
+      color: var(--primary-blue);
+      letter-spacing: 1px;
+    }
+    .word-ipa {
+      font-size: 20px;
+      color: #B0B0C4;
+      margin-top: 2px;
+    }
+
+    .viewport-card {
+      position: relative;
+      height: 180px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #242436 0%, #171722 100%);
+      overflow: hidden;
+    }
+    .face-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .viewport-overlay {
+      position: absolute;
+      bottom: 8px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #9A9AB0;
+      background: rgba(18, 18, 26, 0.7);
+      padding: 4px 10px;
+      border-radius: 8px;
+      backdrop-filter: blur(4px);
+    }
+
+    .controls-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: -6px;
+      padding-left: 4px;
+    }
+    .controls-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .btn {
+      border: none;
+      outline: none;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn:active {
+      transform: scale(0.97);
+    }
+    .btn-good {
+      background-color: #2E7D32;
+      color: #FFF;
+      box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
+    }
+    .btn-confused {
+      background-color: #C62828;
+      color: #FFF;
+      box-shadow: 0 4px 12px rgba(198, 40, 40, 0.3);
+    }
+    .btn.active {
+      outline: 2px solid #FFF;
+      box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+    }
+
+    .score-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .score-total {
+      font-size: 48px;
+      font-weight: 800;
+      line-height: 1;
+      transition: color 0.3s;
+    }
+    .sub-scores {
+      display: flex;
+      gap: 16px;
+      font-size: 13px;
+      color: #B5B5C8;
+    }
+    .sub-score-item span {
+      font-weight: bold;
+      color: #FFF;
+    }
+
+    .phonemes-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin: 10px 0 6px 0;
+    }
+    .phonemes-row {
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
+    .phoneme-pill {
+      flex: 1;
+      padding: 8px 4px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      text-align: center;
+      transition: all 0.3s;
+    }
+    .phoneme-pill.error {
+      background: rgba(255, 82, 82, 0.15);
+      border: 1px solid var(--warning-red);
+    }
+    .phoneme-sym {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .phoneme-val {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .guidance-card {
+      background: #172230;
+      border-color: #243B53;
+      transition: all 0.3s;
+    }
+    .guidance-card.warning {
+      background: #2D1A1A;
+      border-color: #5A2727;
+    }
+    .guidance-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .guidance-text {
+      font-size: 13px;
+      line-height: 1.5;
+      color: #E2E8F0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="phone-container">
+    <div class="top-bar">
+      <h1>Pronunciation Coach</h1>
+      <span class="badge-v">Web Demo v0.1</span>
+    </div>
+
+    <div class="content-area">
+      <div class="card word-card">
+        <div class="word-title">Target Word</div>
+        <div class="word-main">funk</div>
+        <div class="word-ipa">/fʌŋk/</div>
+      </div>
+
+      <div class="card viewport-card">
+        <canvas id="visemeCanvas" class="face-canvas"></canvas>
+        <div class="viewport-overlay">
+          <span id="jawStatus">下颌开合度: 0.38 (标准)</span>
+          <span id="lipStatus">唇部形态: 放松平唇</span>
+        </div>
+      </div>
+
+      <div class="controls-label">实测用例模拟输入 (点击切换)</div>
+      <div class="controls-row">
+        <button class="btn btn-good active" id="btnGood" onclick="switchMode('good')">
+          🟢 funk_good
+        </button>
+        <button class="btn btn-confused" id="btnConfused" onclick="switchMode('confused')">
+          🔴 funk_ah (/ɑ/)
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="score-header">
+          <div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 2px;">综合多模态评分</div>
+            <div class="sub-scores">
+              <div class="sub-score-item">声音准确度: <span id="acousticScore">92</span></div>
+              <div class="sub-score-item">口型准确度: <span id="visualScore">96</span></div>
+            </div>
+          </div>
+          <div class="score-total" id="overallScore" style="color: var(--success-green);">93</div>
+        </div>
+
+        <div class="phonemes-label">音素对齐与判定拆解 (CTC & Viseme)</div>
+        <div class="phonemes-row">
+          <div class="phoneme-pill" id="pillF">
+            <div class="phoneme-sym">/f/</div>
+            <div class="phoneme-val" id="valF" style="color: #81C784;">94</div>
+          </div>
+          <div class="phoneme-pill" id="pillCaret">
+            <div class="phoneme-sym">/ʌ/</div>
+            <div class="phoneme-val" id="valCaret" style="color: #81C784;">90</div>
+          </div>
+          <div class="phoneme-pill" id="pillNg">
+            <div class="phoneme-sym">/ŋ/</div>
+            <div class="phoneme-val" id="valNg" style="color: #81C784;">91</div>
+          </div>
+          <div class="phoneme-pill" id="pillK">
+            <div class="phoneme-sym">/k/</div>
+            <div class="phoneme-val" id="valK" style="color: #81C784;">88</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card guidance-card" id="guidanceCard">
+        <div class="guidance-header" id="guidanceHeader" style="color: #64B5F6;">
+          💡 AI Coach 实时矫正建议
+        </div>
+        <div class="guidance-text" id="guidanceText">
+          • 整体发音优异！中央中元音 /ʌ/ 定位准确，下颌开合度恰当，软腭鼻音 /ŋ/ 闭合过渡自然。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("visemeCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let currentMode = "good";
+    let animFrame = 0;
+
+    function resizeCanvas() {
+      canvas.width = canvas.clientWidth * window.devicePixelRatio;
+      canvas.height = canvas.clientHeight * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    function drawMouth() {
+      animFrame++;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      const cx = w / 2;
+      const cy = h / 2 - 5;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const breath = Math.sin(animFrame * 0.05) * 1.5;
+      const isGood = currentMode === "good";
+      const jawOpen = isGood ? 18 + breath : 46 + breath * 1.5;
+      const mouthWidth = isGood ? 65 : 55;
+      const strokeColor = isGood ? "#4CAF50" : "#FF5252";
+
+      // Draw Guideline
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+      ctx.lineWidth = 1.5;
+      ctx.ellipse(cx, cy + 10, 85, 75, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Outer Lips
+      ctx.beginPath();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2.5;
+      ctx.moveTo(cx - mouthWidth, cy);
+      ctx.quadraticCurveTo(cx - 20, cy - 14, cx, cy - 10);
+      ctx.quadraticCurveTo(cx + 20, cy - 14, cx + mouthWidth, cy);
+      ctx.quadraticCurveTo(cx, cy + jawOpen + 12, cx - mouthWidth, cy);
+      ctx.stroke();
+
+      // Inner Gap
+      ctx.beginPath();
+      ctx.fillStyle = isGood ? "rgba(76, 175, 80, 0.15)" : "rgba(255, 82, 82, 0.25)";
+      ctx.moveTo(cx - mouthWidth + 10, cy);
+      ctx.quadraticCurveTo(cx, cy - 4, cx + mouthWidth - 10, cy);
+      ctx.quadraticCurveTo(cx, cy + jawOpen, cx - mouthWidth + 10, cy);
+      ctx.fill();
+
+      // Landmarks
+      const points = [
+        [cx - mouthWidth, cy],
+        [cx - 30, cy - 12],
+        [cx, cy - 10],
+        [cx + 30, cy - 12],
+        [cx + mouthWidth, cy],
+        [cx + 35, cy + (jawOpen + 12) * 0.7],
+        [cx, cy + jawOpen + 12],
+        [cx - 35, cy + (jawOpen + 12) * 0.7]
+      ];
+
+      points.forEach(([x, y]) => {
+        ctx.beginPath();
+        ctx.fillStyle = isGood ? "#81C784" : "#FF8A80";
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      requestAnimationFrame(drawMouth);
+    }
+    requestAnimationFrame(drawMouth);
+
+    function switchMode(mode) {
+      currentMode = mode;
+
+      const btnGood = document.getElementById("btnGood");
+      const btnConfused = document.getElementById("btnConfused");
+      const overall = document.getElementById("overallScore");
+      const acoustic = document.getElementById("acousticScore");
+      const visual = document.getElementById("visualScore");
+      const jaw = document.getElementById("jawStatus");
+      const lip = document.getElementById("lipStatus");
+
+      const pillCaret = document.getElementById("pillCaret");
+      const valCaret = document.getElementById("valCaret");
+
+      const guidanceCard = document.getElementById("guidanceCard");
+      const guidanceHeader = document.getElementById("guidanceHeader");
+      const guidanceText = document.getElementById("guidanceText");
+
+      if (mode === "good") {
+        btnGood.classList.add("active");
+        btnConfused.classList.remove("active");
+
+        overall.textContent = "93";
+        overall.style.color = "var(--success-green)";
+        acoustic.textContent = "92";
+        visual.textContent = "96";
+        jaw.textContent = "下颌开合度: 0.38 (标准)";
+        lip.textContent = "唇部形态: 放松平唇";
+
+        pillCaret.classList.remove("error");
+        valCaret.textContent = "90";
+        valCaret.style.color = "#81C784";
+
+        guidanceCard.classList.remove("warning");
+        guidanceHeader.textContent = "💡 AI Coach 实时矫正建议";
+        guidanceHeader.style.color = "#64B5F6";
+        guidanceText.innerHTML = "• 整体发音优异！中央中元音 /ʌ/ 定位准确，下颌开合度恰当，软腭鼻音 /ŋ/ 闭合过渡自然。";
+      } else {
+        btnConfused.classList.add("active");
+        btnGood.classList.remove("active");
+
+        overall.textContent = "54";
+        overall.style.color = "var(--warning-amber)";
+        acoustic.textContent = "48";
+        visual.textContent = "50";
+        jaw.textContent = "下颌开合度: 0.65 (过度偏大)";
+        lip.textContent = "唇部形态: 宽扁拉长";
+
+        pillCaret.classList.add("error");
+        valCaret.textContent = "45 ⚠️";
+        valCaret.style.color = "var(--warning-red)";
+
+        guidanceCard.classList.add("warning");
+        guidanceHeader.textContent = "⚠️ 发音偏离预警 (检测到 /ɑ/ 混淆)";
+        guidanceHeader.style.color = "var(--warning-red)";
+        guidanceText.innerHTML = "• <b>收紧下颌</b>：发 /ʌ/ 时嘴巴切勿像发 /ɑ/ 那样大张，保持下颌放松、嘴唇微微张开即可。<br>• 建议先单独发两次短促居中的 /ʌ/，感受下巴位置后再拼读单词。";
+      }
+    }
+  </script>
+</body>
+</html>
