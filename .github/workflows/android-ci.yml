@@ -104,8 +104,8 @@ jobs:
           body: |
             ### 🚀 Automated Update Deployment
 
-            - **Target Device**: OnePlus 8 / Android 8.0+ (ARM64 16KB Page Compatible)
-            - **Engine Components**: JNI Rust core `libpronunciation_core.so`, ONNX Runtime Mobile, CameraX & ML Kit Face Tracking.
+            - **Target Device**: OnePlus 8 / Android 15+ (ARM64 16KB Native Page Size Aligned)
+            - **Engine Components**: JNI Rust core `libpronunciation_core.so`, Google LiteRT 1.4.0, CameraX & ML Kit Face Tracking.
 
             #### 📲 Installation:
             Download **`app-debug.apk`** below to install/update directly on your device.
