@@ -27,6 +27,8 @@ models/*.safetensors
 datasets/*.wav
 datasets/*.mp4
 !datasets/README.md
+dataset/
+wheels/
 
 # Python
 __pycache__/
@@ -49,8 +51,3 @@ temp_model/
 ai_dir/
 ai_extracted/
 results/
-wheels/
-numpy_url.txt
-*.png
-!android-app/**/src/**/res/**/*.png
-!android-app/app/src/main/assets/test_images/*.jpg

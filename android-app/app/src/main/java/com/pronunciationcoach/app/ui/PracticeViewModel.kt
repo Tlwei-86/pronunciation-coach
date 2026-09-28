@@ -3,6 +3,8 @@ package com.pronunciationcoach.app.ui
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pronunciationcoach.app.audio.IStandardAudioPlayer
+import com.pronunciationcoach.app.audio.IUserAudioPlaybackEngine
 import com.pronunciationcoach.app.audio.StandardAudioPlayer
 import com.pronunciationcoach.app.audio.UserAudioPlaybackEngine
 import com.pronunciationcoach.app.core.AcousticFeatureExtractor
@@ -62,13 +64,13 @@ class PracticeViewModel(
     private val context: Context? = null,
     private val localProvider: ReasoningProvider = LocalRuleProvider(),
     private val deepSeekProvider: ReasoningProvider = DeepSeekProvider(),
-    audioPlayer: StandardAudioPlayer? = null,
-    playbackEngine: UserAudioPlaybackEngine? = null,
+    audioPlayer: IStandardAudioPlayer? = null,
+    playbackEngine: IUserAudioPlaybackEngine? = null,
     private val coroutineDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) : ViewModel() {
 
-    private val standardAudioPlayer: StandardAudioPlayer? = audioPlayer ?: context?.let { StandardAudioPlayer(it) }
-    private val userAudioPlaybackEngine: UserAudioPlaybackEngine? = playbackEngine ?: context?.let { UserAudioPlaybackEngine(it) }
+    private val standardAudioPlayer: IStandardAudioPlayer? = audioPlayer ?: context?.let { StandardAudioPlayer(it) }
+    private val userAudioPlaybackEngine: IUserAudioPlaybackEngine? = playbackEngine ?: context?.let { UserAudioPlaybackEngine(it) }
 
     private val _uiState = MutableStateFlow(PracticeUiState())
     val uiState: StateFlow<PracticeUiState> = _uiState.asStateFlow()
@@ -263,7 +265,7 @@ class PracticeViewModel(
             it.copy(
                 isRecording = false,
                 isEvaluating = true,
-                statusMessage = "正在进行多模态发音评测..."
+                statusMessage = "正在进行多模态发音测评..."
             )
         }
 
@@ -366,7 +368,7 @@ class PracticeViewModel(
                 isEvaluating = false,
                 evaluationResult = result,
                 selectedPhonemeSymbol = lowestPhoneme?.symbol ?: result.phonemeEvaluations.firstOrNull()?.symbol,
-                statusMessage = "评测完成: 得分 ${result.overallScore} 分"
+                statusMessage = "测评完成: 得分 ${result.overallScore} 分"
             )
         }
     }

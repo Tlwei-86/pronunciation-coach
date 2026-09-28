@@ -22,7 +22,7 @@ import java.nio.ByteOrder
  * Caches incoming raw PCM data into a valid 44-byte WAV header file at `cache/last_recording.wav`
  * and provides instant playback via high-performance AudioTrack with MediaPlayer fallback.
  */
-class UserAudioPlaybackEngine(private val context: Context) {
+class UserAudioPlaybackEngine(private val context: Context) : IUserAudioPlaybackEngine {
 
     private val scope = CoroutineScope(Dispatchers.Default)
     private var playbackJob: Job? = null
@@ -30,7 +30,7 @@ class UserAudioPlaybackEngine(private val context: Context) {
     private var activeMediaPlayer: MediaPlayer? = null
 
     @Volatile
-    var isPlaying: Boolean = false
+    override var isPlaying: Boolean = false
         private set
 
     private var lastRecordedPcm: ByteArray? = null
@@ -47,7 +47,7 @@ class UserAudioPlaybackEngine(private val context: Context) {
     /**
      * Checks if a user recording is present in memory or on disk.
      */
-    fun hasLastRecording(): Boolean {
+    override fun hasLastRecording(): Boolean {
         return (lastRecordedPcm != null && lastRecordedPcm!!.isNotEmpty()) ||
                 (cacheWavFile.exists() && cacheWavFile.length() > 44)
     }
@@ -55,46 +55,49 @@ class UserAudioPlaybackEngine(private val context: Context) {
     /**
      * Gets the cached WAV file if it exists.
      */
-    fun getLastRecordingFile(): File? {
+    override fun getLastRecordingFile(): File? {
         return if (hasLastRecording() && cacheWavFile.exists()) cacheWavFile else null
     }
 
     /**
      * Caches raw PCM byte array to `cache/last_recording.wav` with a complete 44-byte WAV header.
      */
-    fun saveRecording(
+    override fun saveRecording(
         pcmData: ByteArray,
-        sampleRate: Int = 16000,
-        channels: Int = 1,
-        bitsPerSample: Int = 16
-    ): File {
+        sampleRate: Int,
+        channels: Int,
+        bitsPerSample: Int
+    ): File? {
         lastRecordedPcm = pcmData
         val outFile = cacheWavFile
 
-        FileOutputStream(outFile).use { fos ->
-            val header = createWavHeader(
-                totalAudioLen = pcmData.size.toLong(),
-                totalDataLen = (pcmData.size + 36).toLong(),
-                longSampleRate = sampleRate.toLong(),
-                channels = channels,
-                byteRate = (sampleRate * channels * bitsPerSample / 8).toLong(),
-                bitsPerSample = bitsPerSample
-            )
-            fos.write(header)
-            fos.write(pcmData)
-            fos.flush()
+        try {
+            FileOutputStream(outFile).use { fos ->
+                val header = createWavHeader(
+                    totalAudioLen = pcmData.size.toLong(),
+                    totalDataLen = (pcmData.size + 36).toLong(),
+                    longSampleRate = sampleRate.toLong(),
+                    channels = channels,
+                    byteRate = (sampleRate * channels * bitsPerSample / 8).toLong(),
+                    bitsPerSample = bitsPerSample
+                )
+                fos.write(header)
+                fos.write(pcmData)
+                fos.flush()
+            }
+            return outFile
+        } catch (e: Exception) {
+            return null
         }
-
-        return outFile
     }
 
     /**
      * Plays the last recorded user audio. Prefers low-latency AudioTrack from cached memory,
      * falling back to MediaPlayer with the cached WAV file.
      */
-    fun playLastRecording(
-        onStart: (() -> Unit)? = null,
-        onComplete: (() -> Unit)? = null
+    override fun playLastRecording(
+        onStart: (() -> Unit)?,
+        onComplete: (() -> Unit)?
     ) {
         val pcm = lastRecordedPcm
         if (pcm != null && pcm.isNotEmpty()) {
@@ -166,9 +169,19 @@ class UserAudioPlaybackEngine(private val context: Context) {
                     offset += written
                 }
 
-                // Wait briefly for trailing buffer to drain
-                val durationMs = ((pcmData.size / 2) * 1000L) / sampleRate
-                kotlinx.coroutines.delay(100L)
+                // Wait for the full audio track playback to finish naturally
+                val totalFrames = pcmData.size / 2
+                val durationMs = (totalFrames * 1000L) / sampleRate
+                val startTime = System.currentTimeMillis()
+                val maxWaitMs = durationMs + 400L // allow slight latency margin
+
+                while (isPlaying && (System.currentTimeMillis() - startTime) < maxWaitMs) {
+                    val head = try { track.playbackHeadPosition } catch (e: Exception) { totalFrames }
+                    if (head >= totalFrames) {
+                        break
+                    }
+                    kotlinx.coroutines.delay(25L)
+                }
             } catch (e: Exception) {
                 // Ignore interruption / playback error
             } finally {
@@ -197,8 +210,7 @@ class UserAudioPlaybackEngine(private val context: Context) {
         try {
             val mp = MediaPlayer().apply {
                 setDataSource(context, Uri.fromFile(file))
-                setOnPreparedListener { player ->
-                    onStart?.invoke()
+                setOnPreparedListener { player ->\n                    onStart?.invoke()
                     player.start()
                 }
                 setOnCompletionListener { player ->
@@ -226,7 +238,7 @@ class UserAudioPlaybackEngine(private val context: Context) {
     /**
      * Immediately stops any current playback.
      */
-    fun stopPlayback() {
+    override fun stopPlayback() {
         isPlaying = false
         playbackJob?.cancel()
         playbackJob = null
@@ -247,7 +259,7 @@ class UserAudioPlaybackEngine(private val context: Context) {
     /**
      * Releases all playback resources.
      */
-    fun release() {
+    override fun release() {
         stopPlayback()
         lastRecordedPcm = null
     }

@@ -1,4 +1,4 @@
-pub mod audio;
+﻿pub mod audio;
 pub mod evidence;
 pub mod jni;
 pub mod phoneme;
@@ -70,5 +70,35 @@ mod tests {
         let s = serde_json::to_string(&ev).unwrap();
         let decoded: EvidenceJson = serde_json::from_str(&s).unwrap();
         assert_eq!(ev, decoded);
+    }
+}
+
+use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
+use crate::scoring::scorer::analyze_word_pronunciation_json;
+
+#[no_mangle]
+pub extern "C" fn core_analyze_word_json(input: *const c_char) -> *mut c_char {
+    if input.is_null() {
+        return std::ptr::null_mut();
+    }
+    let c_str = unsafe { CStr::from_ptr(input) };
+    let r_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    let output = analyze_word_pronunciation_json(r_str);
+    match CString::new(output) {
+        Ok(cs) => cs.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn core_free_string(ptr: *mut c_char) {
+    if !ptr.is_null() {
+        unsafe {
+            let _ = CString::from_raw(ptr);
+        }
     }
 }

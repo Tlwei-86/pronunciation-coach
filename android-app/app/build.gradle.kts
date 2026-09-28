@@ -68,11 +68,21 @@ android {
     }
     packaging {
         jniLibs {
-            useLegacyPackaging = true
+            useLegacyPackaging = false
         }
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        dependencySubstitution {
+            substitute(module("org.tensorflow:tensorflow-lite"))
+                .using(module("com.google.ai.edge.litert:litert:1.4.0"))
+                .because("16KB page alignment requires Google LiteRT")
+        }
     }
 }
 
@@ -90,7 +100,8 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.face.detection)
-    implementation(libs.onnxruntime.android)
+    implementation(libs.litert)
+    implementation(libs.litert.api)
     
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

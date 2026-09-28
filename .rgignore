@@ -1,0 +1,49 @@
+# === .ignore (ripgrep, fd, and Agent Search Optimization) ===
+# 1. Large binaries, packages, and model weights
+*.apk
+*.aab
+*.zip
+*.tar.gz
+*.7z
+*.bin
+*.onnx
+*.safetensors
+
+# 2. Build artifacts and intermediate compiler caches
+**/target/**
+**/build/**
+**/.gradle/**
+**/.cxx/**
+**/.externalNativeBuild/**
+**/captures/**
+
+# 3. Temporary extracted directories and archives
+ai_extracted/
+arm64_16k_extracted/
+calibrated_extracted/
+final_arm64_extracted/
+hw_extracted/
+neural_extracted/
+ai_dir/
+temp_model/
+build-artifacts*/
+new_artifacts/
+archives/
+wheels/
+
+# 4. Large raw media and dumps in root
+*.png
+*.jpg
+*.jpeg
+*.wav
+*.mp4
+*.xml
+*.log
+!android-app/**/src/**/res/**
+!android-app/**/src/**/assets/**
+
+# 5. OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+*.iml

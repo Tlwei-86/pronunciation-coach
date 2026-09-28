@@ -1,11 +1,10 @@
 package com.pronunciationcoach.app.core
 
 import android.content.Context
-import ai.onnxruntime.OnnxTensor
-import ai.onnxruntime.OrtEnvironment
-import ai.onnxruntime.OrtSession
+import org.tensorflow.lite.Interpreter
 import java.io.InputStream
-import java.nio.FloatBuffer
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.log10
@@ -24,12 +23,11 @@ data class NeuralAcousticResult(
 )
 
 /**
- * Real on-device neural network acoustic inference engine using ONNX Runtime Mobile.
- * Executes forward pass of the Conformer/CNN acoustic model on Qualcomm Snapdragon 865.
+ * Real on-device neural acoustic inference engine powered by Google LiteRT (TensorFlow Lite evolution).
+ * Formatted for strict 16KB ELF page size alignment on Android 15.
  */
-class OnnxAcousticEngine(private val context: Context) {
-    private var env: OrtEnvironment? = null
-    private var session: OrtSession? = null
+class LiteRTAcousticEngine(private val context: Context) {
+    private var interpreter: Interpreter? = null
     private var isInitialized = false
 
     init {
@@ -38,20 +36,24 @@ class OnnxAcousticEngine(private val context: Context) {
 
     private fun initializeEngine() {
         try {
-            env = OrtEnvironment.getEnvironment()
-            val modelBytes = loadModelBytesFromAssets("models/acoustic_phoneme_net.onnx")
+            val modelBytes = loadModelBytesFromAssets("models/acoustic_phoneme_net.tflite")
             if (modelBytes != null) {
-                val opts = OrtSession.SessionOptions().apply {
-                    setIntraOpNumThreads(4)
+                val byteBuffer = ByteBuffer.allocateDirect(modelBytes.size).apply {
+                    order(ByteOrder.nativeOrder())
+                    put(modelBytes)
+                    rewind()
                 }
-                session = env?.createSession(modelBytes, opts)
+                val options = Interpreter.Options().apply {
+                    numThreads = 4
+                }
+                interpreter = Interpreter(byteBuffer, options)
                 isInitialized = true
-                println("[OnnxAcousticEngine] Successfully loaded ONNX acoustic neural network into memory.")
+                println("[LiteRTAcousticEngine] Successfully loaded LiteRT acoustic model into memory.")
             } else {
-                println("[OnnxAcousticEngine] Failed to load ONNX model bytes from assets.")
+                println("[LiteRTAcousticEngine] LiteRT model file not found in assets, fallback active.")
             }
         } catch (e: Throwable) {
-            println("[OnnxAcousticEngine] Initialization failed: ${e.message}")
+            println("[LiteRTAcousticEngine] Initialization failed: ${e.message}")
             isInitialized = false
         }
     }
@@ -150,13 +152,12 @@ class OnnxAcousticEngine(private val context: Context) {
     }
 
     /**
-     * Executes neural inference on PCM audio.
+     * Executes LiteRT neural inference on PCM audio.
      */
     fun inferAudio(pcmData: ByteArray): NeuralAcousticResult {
         val startTime = System.currentTimeMillis()
 
-        if (!isInitialized || session == null || env == null) {
-            // Fallback if ONNX session fails
+        if (!isInitialized || interpreter == null) {
             return fallbackInference(pcmData, System.currentTimeMillis() - startTime)
         }
 
@@ -165,46 +166,34 @@ class OnnxAcousticEngine(private val context: Context) {
             val numFrames = melSpec.size
             val numMelBins = 80
 
-            // Flatten melSpec into FloatBuffer for shape [1, numFrames, 80]
-            val flatMel = FloatArray(numFrames * numMelBins)
-            var idx = 0
-            for (f in 0 until numFrames) {
-                for (b in 0 until numMelBins) {
-                    flatMel[idx++] = melSpec[f][b]
+            val inputBuffer = ByteBuffer.allocateDirect(1 * numFrames * numMelBins * 4).apply {
+                order(ByteOrder.nativeOrder())
+                for (f in 0 until numFrames) {
+                    for (b in 0 until numMelBins) {
+                        putFloat(melSpec[f][b])
+                    }
                 }
+                rewind()
             }
 
-            val tensorShape = longArrayOf(1, numFrames.toLong(), numMelBins.toLong())
-            val inputTensor = OnnxTensor.createTensor(env, FloatBuffer.wrap(flatMel), tensorShape)
-
-            val outputs = session?.run(mapOf("mel_input" to inputTensor))
-            val outputTensor = outputs?.get(0) as? OnnxTensor
-            val logits = outputTensor?.floatBuffer
-
-            val targetProb: Float
-            val confusionProb: Float
-            val dominantPhoneme: String
-            val likelihoods = mutableMapOf<String, Float>()
-
-            if (logits != null && logits.remaining() >= 2) {
-                val pCaret = logits.get(0)
-                val pAlpha = logits.get(1)
-
-                targetProb = pCaret.coerceIn(0.01f, 0.99f)
-                confusionProb = pAlpha.coerceIn(0.01f, 0.99f)
-                dominantPhoneme = if (targetProb >= confusionProb) "/ʌ/" else "/ɑ/"
-
-                likelihoods["/ʌ/"] = targetProb
-                likelihoods["/ɑ/"] = confusionProb
-            } else {
-                targetProb = 0.50f
-                confusionProb = 0.50f
-                dominantPhoneme = "/ʌ/"
+            val outputBuffer = ByteBuffer.allocateDirect(2 * 4).apply {
+                order(ByteOrder.nativeOrder())
             }
 
-            inputTensor.close()
-            outputTensor?.close()
-            outputs?.close()
+            interpreter?.run(inputBuffer, outputBuffer)
+            outputBuffer.rewind()
+
+            val pCaret = outputBuffer.float
+            val pAlpha = outputBuffer.float
+
+            val targetProb = pCaret.coerceIn(0.01f, 0.99f)
+            val confusionProb = pAlpha.coerceIn(0.01f, 0.99f)
+            val dominantPhoneme = if (targetProb >= confusionProb) "/ʌ/" else "/ɑ/"
+
+            val likelihoods = mutableMapOf(
+                "/ʌ/" to targetProb,
+                "/ɑ/" to confusionProb
+            )
 
             val totalTime = System.currentTimeMillis() - startTime
             return NeuralAcousticResult(
@@ -216,7 +205,7 @@ class OnnxAcousticEngine(private val context: Context) {
                 isNeuralEngineActive = true
             )
         } catch (e: Throwable) {
-            println("[OnnxAcousticEngine] Neural inference exception: ${e.message}")
+            println("[LiteRTAcousticEngine] LiteRT inference exception: ${e.message}")
             return fallbackInference(pcmData, System.currentTimeMillis() - startTime)
         }
     }
@@ -235,10 +224,9 @@ class OnnxAcousticEngine(private val context: Context) {
 
     fun close() {
         try {
-            session?.close()
-            env?.close()
-        } catch (e: Exception) {
-            // Ignored
-        }
+            interpreter?.close()
+        } catch (e: Exception) {}
+        interpreter = null
+        isInitialized = false
     }
 }

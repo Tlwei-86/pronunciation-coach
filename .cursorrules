@@ -1,0 +1,17 @@
+# AI Agent Guidelines & Fast Search Protocol
+
+## 1. File Traversal & Search Rules
+- Always use targeted, path-scoped searches (e.g. search in `android-app/app/src/main` or `pronunciation-core/src` or `docs/`).
+- Do NOT run unbounded global searches across the entire workspace root.
+- The `.ignore` and `.rgignore` files explicitly exclude `archives/`, `target/`, `build/`, `*.zip`, `*.apk`. Respect these exclusions.
+- If using `rg` in CLI, always provide an explicit path target (e.g. `rg "pattern" .`) and use `--max-filesize 2M` to avoid stdin hangs or buffering memory-mapped files.
+
+## 2. Fast Verification Commands
+- Rust Core Unit Tests: `cargo test --lib` inside `pronunciation-core` (takes < 3 seconds, 41 unit tests).
+- Golden Alignment & Acoustic Verification: `python tools/python/run_verification.py` (takes ~1 second, 7 golden cases).
+- 500-Word Comparative Benchmark: `python tools/automation/generate_500words_report.py`.
+
+## 3. CLI & Process Safeguards
+- Never execute blocking commands that wait indefinitely for input.
+- For `adb` commands, verify device connectivity first (`adb devices`) before running shell commands.
+- Never write new unversioned large binaries (*.zip, *.apk, *.bin) to the root directory; use `archives/` instead.

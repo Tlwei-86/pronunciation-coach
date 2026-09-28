@@ -16,11 +16,12 @@ import java.util.UUID
 class StandardAudioPlayer(
     context: Context,
     private val onInitListener: ((Boolean) -> Unit)? = null
-) : TextToSpeech.OnInitListener {
+) : TextToSpeech.OnInitListener, IStandardAudioPlayer {
 
     private val appContext = context.applicationContext
     private var tts: TextToSpeech? = TextToSpeech(appContext, this)
     private var isInitialized = false
+    private var initFailed = false
     private var pendingWord: String? = null
     private var pendingOnStart: (() -> Unit)? = null
     private var pendingOnComplete: (() -> Unit)? = null
@@ -30,7 +31,7 @@ class StandardAudioPlayer(
     private var currentOnComplete: (() -> Unit)? = null
 
     @Volatile
-    var isPlaying: Boolean = false
+    override var isPlaying: Boolean = false
         private set
 
     init {
@@ -55,6 +56,7 @@ class StandardAudioPlayer(
                     ttsEngine.setAudioAttributes(audioAttributes)
 
                     isInitialized = true
+                    initFailed = false
                     onInitListener?.invoke(true)
 
                     // Execute any pending play request
@@ -71,12 +73,18 @@ class StandardAudioPlayer(
             }
         }
         isInitialized = false
+        initFailed = true
+        isPlaying = false
+        val comp = pendingOnComplete
+        pendingWord = null
+        pendingOnStart = null
+        pendingOnComplete = null
+        comp?.invoke()
         onInitListener?.invoke(false)
     }
 
     private fun setupProgressListener() {
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {\n            override fun onStart(utteranceId: String?) {
                 if (utteranceId == activeUtteranceId) {
                     isPlaying = true
                     currentOnStart?.invoke()
@@ -110,7 +118,7 @@ class StandardAudioPlayer(
     /**
      * Plays the given standard word or sentence in American English.
      */
-    fun playWord(
+    override fun playWord(
         text: String,
         onStart: (() -> Unit)? = null,
         onComplete: (() -> Unit)? = null
@@ -122,6 +130,12 @@ class StandardAudioPlayer(
         }
 
         if (!isInitialized) {
+            if (initFailed) {
+                // Cannot play if TTS initialization previously failed
+                isPlaying = false
+                onComplete?.invoke()
+                return
+            }
             pendingWord = cleanText
             pendingOnStart = onStart
             pendingOnComplete = onComplete
@@ -149,7 +163,7 @@ class StandardAudioPlayer(
     /**
      * Stops current playback immediately.
      */
-    fun stop() {
+    override fun stop() {
         tts?.stop()
         isPlaying = false
     }
@@ -157,7 +171,7 @@ class StandardAudioPlayer(
     /**
      * Releases TextToSpeech resources.
      */
-    fun release() {
+    override fun release() {
         stop()
         tts?.shutdown()
         tts = null

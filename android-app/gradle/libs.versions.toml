@@ -1,5 +1,5 @@
 [versions]
-agp = "8.3.2"
+agp = "8.5.2"
 kotlin = "1.9.23"
 coreKtx = "1.12.0"
 lifecycleRuntimeKtx = "2.7.0"
@@ -10,7 +10,7 @@ json = "20240303"
 kotlinxCoroutines = "1.8.0"
 camerax = "1.4.1"
 mlkitFace = "16.1.7"
-onnxruntime = "1.20.0"
+litert = "1.4.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -26,7 +26,8 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 mlkit-face-detection = { group = "com.google.mlkit", name = "face-detection", version.ref = "mlkitFace" }
-onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
+litert-api = { group = "com.google.ai.edge.litert", name = "litert-api", version.ref = "litert" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
