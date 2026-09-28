@@ -79,6 +79,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn core_analyze_word_json(input: *const c_char) -> *mut c_char {
     if input.is_null() {
         return std::ptr::null_mut();
@@ -96,6 +97,7 @@ pub extern "C" fn core_analyze_word_json(input: *const c_char) -> *mut c_char {
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn core_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         unsafe {
