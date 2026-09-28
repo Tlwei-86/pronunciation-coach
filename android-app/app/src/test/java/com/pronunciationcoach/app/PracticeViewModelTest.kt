@@ -201,6 +201,25 @@ class PracticeViewModelTest {
     }
 
     @Test
+    fun testUpdateFaceMetricsDampensMicroJitter() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+        testScheduler.advanceUntilIdle()
+
+        // 1. Initial significant setup
+        viewModel.updateFaceMetrics(jawOpen = 0.40f, lipRoundness = 0.20f, isFaceDetected = true)
+        assertEquals(0.40f, viewModel.uiState.value.liveJawOpen, 0.001f)
+
+        // 2. Micro jitter (< 0.02f) immediately without time elapsed
+        viewModel.updateFaceMetrics(jawOpen = 0.405f, lipRoundness = 0.205f, isFaceDetected = true)
+        // Values should be dampened / unchanged to save battery
+        assertEquals(0.40f, viewModel.uiState.value.liveJawOpen, 0.001f)
+
+        // 3. Significant movement (>= 0.02f)
+        viewModel.updateFaceMetrics(jawOpen = 0.43f, lipRoundness = 0.20f, isFaceDetected = true)
+        assertEquals(0.43f, viewModel.uiState.value.liveJawOpen, 0.001f)
+    }
+
+    @Test
     fun testPlayStandardPronunciationLifecycle() = runTest(testDispatcher) {
         val viewModel = createViewModel()
         testScheduler.advanceUntilIdle()

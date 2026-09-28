@@ -1,5 +1,6 @@
 package com.pronunciationcoach.app.vision
 
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -31,6 +32,20 @@ class RealFaceLandmarkAnalyzer(
     private val onMetricsUpdated: (LiveFaceMouthMetrics) -> Unit
 ) : ImageAnalysis.Analyzer {
 
+    companion object {
+        private const val INTERVAL_RECORDING_MS = 80L        // High performance (~12.5 FPS)
+        private const val INTERVAL_IDLE_FACE_MS = 200L       // Idle preview with face detected (~5 FPS)
+        private const val INTERVAL_STANDBY_NO_FACE_MS = 600L // Standby heartbeat (~1.6 FPS)
+        private const val NO_FACE_TIMEOUT_MS = 2000L         // Timeout before falling back to standby
+    }
+
+    @Volatile
+    private var isRecordingActive: Boolean = false
+
+    fun setRecordingActive(active: Boolean) {
+        isRecordingActive = active
+    }
+
     // Configure Face Detector for detailed landmarks (Mouth left/right/bottom, Cheeks) and Contours
     private val options = FaceDetectorOptions.Builder()
         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
@@ -40,17 +55,42 @@ class RealFaceLandmarkAnalyzer(
         .build()
 
     private val detector = FaceDetection.getClient(options)
+
+    @Volatile
     private var isProcessing = false
+
+    @Volatile
+    private var lastProcessedTimestamp = 0L
+
+    @Volatile
+    private var lastFaceDetectedTimestamp = SystemClock.elapsedRealtime()
 
     @OptIn(ExperimentalGetImage::class)
     override fun analyze(imageProxy: ImageProxy) {
+        val now = SystemClock.elapsedRealtime()
+
+        // Scheme 2: Smart Adaptive Multi-tier FPS
+        val targetInterval = when {
+            isRecordingActive -> INTERVAL_RECORDING_MS
+            (now - lastFaceDetectedTimestamp) > NO_FACE_TIMEOUT_MS -> INTERVAL_STANDBY_NO_FACE_MS
+            else -> INTERVAL_IDLE_FACE_MS
+        }
+
+        // Scheme 1: Timestamp Throttling & concurrency check
+        if (isProcessing || (now - lastProcessedTimestamp < targetInterval)) {
+            imageProxy.close()
+            return
+        }
+
         val mediaImage = imageProxy.image
-        if (mediaImage == null || isProcessing) {
+        if (mediaImage == null) {
             imageProxy.close()
             return
         }
 
         isProcessing = true
+        lastProcessedTimestamp = now
+
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
         val image = InputImage.fromMediaImage(mediaImage, rotationDegrees)
 
@@ -58,42 +98,57 @@ class RealFaceLandmarkAnalyzer(
         val imgWidth = if (isRotated) imageProxy.height else imageProxy.width
         val imgHeight = if (isRotated) imageProxy.width else imageProxy.height
 
-        detector.process(image)
-            .addOnSuccessListener { faces ->
-                if (faces.isEmpty()) {
-                    onMetricsUpdated(
-                        LiveFaceMouthMetrics(
-                            jawOpen = 0.40f,
-                            lipRoundness = 0.10f,
-                            mouthWidthNormalized = 0.45f,
-                            isFaceDetected = false,
-                            statusText = "未检测到人脸，请正对屏幕",
-                            lipContourPoints = emptyList(),
-                            sourceImageWidth = imgWidth,
-                            sourceImageHeight = imgHeight,
-                            isFrontCamera = true,
-                            lipClosure = 0f,
-                            mouthStretch = 0f
+        try {
+            detector.process(image)
+                .addOnSuccessListener { faces ->
+                    if (faces.isEmpty()) {
+                        onMetricsUpdated(
+                            LiveFaceMouthMetrics(
+                                jawOpen = 0.40f,
+                                lipRoundness = 0.10f,
+                                mouthWidthNormalized = 0.45f,
+                                isFaceDetected = false,
+                                statusText = "未检测到人脸，请正对屏幕",
+                                lipContourPoints = emptyList(),
+                                sourceImageWidth = imgWidth,
+                                sourceImageHeight = imgHeight,
+                                isFrontCamera = true,
+                                lipClosure = 0f,
+                                mouthStretch = 0f
+                            )
                         )
-                    )
-                } else {
-                    val face = faces[0]
-                    val metrics = calculateMouthMetrics(
-                        face = face,
-                        imageWidth = imgWidth,
-                        imageHeight = imgHeight,
-                        isFrontCamera = true
-                    )
-                    onMetricsUpdated(metrics)
+                    } else {
+                        lastFaceDetectedTimestamp = SystemClock.elapsedRealtime()
+                        val face = faces[0]
+                        val metrics = calculateMouthMetrics(
+                            face = face,
+                            imageWidth = imgWidth,
+                            imageHeight = imgHeight,
+                            isFrontCamera = true
+                        )
+                        onMetricsUpdated(metrics)
+                    }
                 }
-            }
-            .addOnFailureListener { e ->
-                println("[RealFaceLandmarkAnalyzer] Error: ${e.message}")
-            }
-            .addOnCompleteListener {
-                isProcessing = false
-                imageProxy.close()
-            }
+                .addOnFailureListener { e ->
+                    println("[RealFaceLandmarkAnalyzer] Error: ${e.message}")
+                }
+                .addOnCompleteListener {
+                    isProcessing = false
+                    imageProxy.close()
+                }
+        } catch (e: Exception) {
+            println("[RealFaceLandmarkAnalyzer] Exception during processing: ${e.message}")
+            isProcessing = false
+            imageProxy.close()
+        }
+    }
+
+    fun close() {
+        try {
+            detector.close()
+        } catch (e: Exception) {
+            // Ignored
+        }
     }
 
     private fun calculateMouthMetrics(
@@ -180,13 +235,13 @@ class RealFaceLandmarkAnalyzer(
                 lipRoundness = 0.12f,
                 mouthWidthNormalized = 0.45f,
                 isFaceDetected = true,
-                statusText = "已检测到面部 (微调光线与距离)",
+                statusText = "检测到面部，请调整头部角度",
                 lipContourPoints = lipPoints,
                 sourceImageWidth = imageWidth,
                 sourceImageHeight = imageHeight,
                 isFrontCamera = isFrontCamera,
-                lipClosure = 0.3f,
-                mouthStretch = 0.2f
+                lipClosure = 0f,
+                mouthStretch = 0f
             )
         }
     }

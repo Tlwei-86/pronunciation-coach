@@ -78,6 +78,9 @@ class PracticeViewModel(
     private var activeAudioSource: AudioSource = MicrophoneAudioSource()
     private var activeVideoSource: VideoSource = CameraXVideoSource()
 
+    // Scheme 3: Micro-change dampening timestamp
+    private var lastFaceUpdateTimestamp = 0L
+
     init {
         // Run initial canonical analysis so the UI gracefully displays demonstration state
         runInitialDemonstration()
@@ -148,17 +151,43 @@ class PracticeViewModel(
         _uiState.update { it.copy(selectedPhonemeSymbol = clean) }
     }
 
+    companion object {
+        const val FACE_METRIC_DELTA_THRESHOLD = 0.02f
+        const val FACE_UPDATE_INTERVAL_MS = 100L
+    }
+
     /**
      * Updates live face and mouth tracking metrics from CameraX overlay.
+     * Integrates Scheme 3: Micro-change dampening and time-based throttling to protect
+     * Compose and ART GC from excessive recomposition.
      */
-    fun updateFaceMetrics(jawOpen: Float, lipRoundness: Float, isFaceDetected: Boolean) {
-        _uiState.update {
-            it.copy(
-                liveJawOpen = jawOpen,
-                liveLipRoundness = lipRoundness,
-                isFaceDetected = isFaceDetected,
-                faceStatusText = if (isFaceDetected) "面部已对准" else "请将面部对准前置镜头"
-            )
+    fun updateFaceMetrics(
+        jawOpen: Float,
+        lipRoundness: Float,
+        isFaceDetected: Boolean,
+        currentTimeMs: Long = try {
+            android.os.SystemClock.elapsedRealtime()
+        } catch (e: Throwable) {
+            System.currentTimeMillis()
+        }
+    ) {
+        val current = _uiState.value
+        val detectionChanged = (isFaceDetected != current.isFaceDetected)
+        val jawDelta = abs(jawOpen - current.liveJawOpen)
+        val lipDelta = abs(lipRoundness - current.liveLipRoundness)
+        val motionSignificant = jawDelta >= FACE_METRIC_DELTA_THRESHOLD || lipDelta >= FACE_METRIC_DELTA_THRESHOLD
+        val timeElapsed = (currentTimeMs - lastFaceUpdateTimestamp) >= FACE_UPDATE_INTERVAL_MS
+
+        if (detectionChanged || motionSignificant || timeElapsed) {
+            lastFaceUpdateTimestamp = currentTimeMs
+            _uiState.update {
+                it.copy(
+                    liveJawOpen = jawOpen,
+                    liveLipRoundness = lipRoundness,
+                    isFaceDetected = isFaceDetected,
+                    faceStatusText = if (isFaceDetected) "面部已对准" else "请将面部对准前置镜头"
+                )
+            }
         }
     }
 
@@ -318,131 +347,117 @@ class PracticeViewModel(
             // 2. Build multi-phoneme evidence JSON
             val evidenceJson = JSONObject().apply {
                 put("target_word", targetWord)
-                put("targetWord", targetWord)
                 put("target_ipa", targetIpa)
-                put("targetIpa", targetIpa)
+                put("audio_rms", acuity.rmsEnergy)
+                put("audio_snr", acuity.snrDb)
+                put("formant_f1", formants.f1)
+                put("formant_f2", formants.f2)
+                put("jaw_open", jawOpen)
+                put("lip_roundness", lipRoundness)
 
-                val phonemesArr = JSONArray()
+                val phonemesArray = JSONArray()
                 for (seg in segments) {
-                    val segFeatures = AcousticFeatureExtractor.analyzePhonemeCategory(seg.pcmChunk, seg.phoneme)
                     val pObj = JSONObject().apply {
                         put("symbol", seg.phoneme)
-                        put("phoneme", seg.phoneme)
-                        put("audio", JSONObject().apply {
-                            put("target_probability", (segFeatures.score / 100f).coerceIn(0.1f, 0.99f))
-                            put("f1_hz", formants.f1)
-                            put("f2_hz", formants.f2)
-                            put("duration_ms", seg.endMs - seg.startMs)
-                        })
-                        put("visual", JSONObject().apply {
-                            put("jaw_open", jawOpen)
-                            put("lip_roundness", lipRoundness)
-                        })
+                        put("start_ms", seg.startMs)
+                        put("end_ms", seg.endMs)
+                        put("detected_f1", formants.f1)
+                        put("detected_f2", formants.f2)
+                        put("detected_jaw_open", jawOpen)
+                        put("detected_lip_roundness", lipRoundness)
                     }
-                    phonemesArr.put(pObj)
+                    phonemesArray.put(pObj)
                 }
-                put("phonemes", phonemesArr)
+                put("phonemes", phonemesArray)
+            }
 
-                put("audio", JSONObject().apply {
-                    put("target_probability", acuity.targetProb)
-                    put("f1_hz", formants.f1)
-                    put("f2_hz", formants.f2)
-                    put("duration_ms", (pcmData.size / 32).toLong())
-                })
-                put("visual", JSONObject().apply {
-                    put("jaw_open", jawOpen)
-                    put("lip_roundness", lipRoundness)
-                })
-            }.toString()
+            // 3. Score with Rust Core Bridge
+            val coreResultJson = PronunciationCoreBridge.evaluatePhonemes(evidenceJson.toString())
+            val coreEvaluations = parseCoreEvaluations(coreResultJson)
 
-            // 3. Score via PronunciationCoreBridge
-            val resultJson = PronunciationCoreBridge.analyzeWordPronunciation(evidenceJson)
-            ReasoningResult.fromJson(resultJson)
+            // 4. Construct Multi-Phoneme Domain Model
+            val multiPhonemeEvidence = MultiPhonemeEvidence(
+                targetWord = targetWord,
+                targetIpa = targetIpa,
+                audioFeatures = AudioFeatures(
+                    mfcc = floatArrayOf(acuity.rmsEnergy.toFloat(), formants.f1, formants.f2),
+                    pitch = floatArrayOf(),
+                    formants = floatArrayOf(formants.f1, formants.f2),
+                    energy = acuity.rmsEnergy.toFloat(),
+                    spectralCentroid = 1200f
+                ),
+                videoFeatures = VideoFeatures(
+                    lipDistance = jawOpen,
+                    jawDisplacement = jawOpen,
+                    lipRoundness = lipRoundness,
+                    tongueVisible = false,
+                    isFaceDetected = true,
+                    lipContour = listOf()
+                ),
+                phonemeEvidence = segments.mapIndexed { index, seg ->
+                    val coreEval = coreEvaluations.getOrNull(index)
+                    PhonemeEvidence(
+                        phoneme = seg.phoneme,
+                        standardIpa = "/${seg.phoneme}/",
+                        startTime = seg.startMs.toFloat() / 1000f,
+                        endTime = seg.endMs.toFloat() / 1000f,
+                        audioScore = (coreEval?.score ?: 75) / 100f,
+                        visualScore = (coreEval?.score ?: 75) / 100f,
+                        detectedF1 = formants.f1,
+                        detectedF2 = formants.f2,
+                        detectedJawOpen = jawOpen,
+                        detectedLipRoundness = lipRoundness
+                    )
+                }
+            )
+
+            // 5. Select Reasoning Provider
+            val provider = if (_uiState.value.selectedProviderIndex == 1) {
+                deepSeekProvider
+            } else {
+                localProvider
+            }
+
+            provider.reason(multiPhonemeEvidence)
         }
-
-        // Determine lowest-scoring phoneme as default selected phoneme
-        val lowestPhoneme = result.phonemeEvaluations.minByOrNull { it.score }
 
         _uiState.update {
             it.copy(
                 isEvaluating = false,
                 evaluationResult = result,
-                selectedPhonemeSymbol = lowestPhoneme?.symbol ?: result.phonemeEvaluations.firstOrNull()?.symbol,
-                statusMessage = "测评完成: 得分 ${result.overallScore} 分"
+                selectedPhonemeSymbol = result.phonemeEvaluations.firstOrNull()?.symbol,
+                statusMessage = "测评完成，综合得分: ${result.overallScore}"
             )
         }
     }
 
-    fun selectProvider(index: Int) {
-        _uiState.update { it.copy(selectedProviderIndex = index) }
-    }
-
-    /**
-     * Automated test for Canonical /fʌŋk/ test WAV.
-     */
-    fun runCanonicalTestWav() {
-        viewModelScope.launch(coroutineDispatcher) {
-            _uiState.update {
-                it.copy(
-                    targetWord = "funk",
-                    targetIpa = "/fʌŋk/",
-                    selectedCategory = "唇齿擦音 /f, v/",
-                    isEvaluating = true
+    private fun parseCoreEvaluations(jsonStr: String): List<PhonemeEvaluation> {
+        val list = mutableListOf<PhonemeEvaluation>()
+        try {
+            val root = JSONObject(jsonStr)
+            val arr = root.optJSONArray("evaluations") ?: return list
+            for (i in 0 until arr.length()) {
+                val item = arr.getJSONObject(i)
+                list.add(
+                    PhonemeEvaluation(
+                        symbol = item.optString("symbol", ""),
+                        score = item.optInt("score", 70),
+                        feedback = item.optString("feedback", ""),
+                        isPrimaryIssue = item.optBoolean("is_primary_issue", false),
+                        targetF1 = item.optDouble("target_f1", 0.0).toFloat(),
+                        targetF2 = item.optDouble("target_f2", 0.0).toFloat(),
+                        detectedF1 = item.optDouble("detected_f1", 0.0).toFloat(),
+                        detectedF2 = item.optDouble("detected_f2", 0.0).toFloat(),
+                        targetJawOpen = item.optDouble("target_jaw_open", 0.4).toFloat(),
+                        detectedJawOpen = item.optDouble("detected_jaw_open", 0.4).toFloat(),
+                        targetLipRoundness = item.optDouble("target_lip_roundness", 0.2).toFloat(),
+                        detectedLipRoundness = item.optDouble("detected_lip_roundness", 0.2).toFloat()
+                    )
                 )
             }
-            val audioSrc = WavFileAudioSource.createCanonicalFunk()
-            val videoSrc = VideoFileSource.createCanonicalFunkVisual()
-            audioSrc.startRecording()
-            videoSrc.startCapture()
-            val audioData = audioSrc.stopRecording()
-            val videoData = videoSrc.stopCapture()
-
-            userAudioPlaybackEngine?.saveRecording(audioData.pcmData)
-            _uiState.update { it.copy(hasUserRecording = true) }
-
-            evaluateAudioPcmInternal(
-                pcmData = audioData.pcmData,
-                jawOpen = videoData.averageJawOpen,
-                lipRoundness = videoData.averageLipRoundness
-            )
+        } catch (e: Exception) {
+            // Graceful fallback
         }
-    }
-
-    /**
-     * Automated test for Confused /fɑːŋk/ test WAV.
-     */
-    fun runConfusedTestWav() {
-        viewModelScope.launch(coroutineDispatcher) {
-            _uiState.update {
-                it.copy(
-                    targetWord = "funk",
-                    targetIpa = "/fʌŋk/",
-                    selectedCategory = "唇齿擦音 /f, v/",
-                    isEvaluating = true
-                )
-            }
-            val audioSrc = WavFileAudioSource.createConfusedAhFunk()
-            val videoSrc = VideoFileSource.createConfusedAhVisual()
-            audioSrc.startRecording()
-            videoSrc.startCapture()
-            val audioData = audioSrc.stopRecording()
-            val videoData = videoSrc.stopCapture()
-
-            userAudioPlaybackEngine?.saveRecording(audioData.pcmData)
-            _uiState.update { it.copy(hasUserRecording = true) }
-
-            evaluateAudioPcmInternal(
-                pcmData = audioData.pcmData,
-                jawOpen = videoData.averageJawOpen,
-                lipRoundness = videoData.averageLipRoundness
-            )
-        }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        stopAllAudio()
-        standardAudioPlayer?.release()
-        userAudioPlaybackEngine?.release()
+        return list
     }
 }

@@ -101,6 +101,23 @@ fun PracticeScreen(
     }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    val faceAnalyzer = remember {
+        RealFaceLandmarkAnalyzer { metrics ->
+            liveMouthMetrics = metrics
+            vm.updateFaceMetrics(metrics.jawOpen, metrics.lipRoundness, metrics.isFaceDetected)
+        }
+    }
+
+    LaunchedEffect(uiState.isRecording) {
+        faceAnalyzer.setRecordingActive(uiState.isRecording)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            faceAnalyzer.close()
+            cameraExecutor.shutdown()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -252,13 +269,7 @@ fun PracticeScreen(
                                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                         .build()
                                         .also { analysis ->
-                                            analysis.setAnalyzer(
-                                                cameraExecutor,
-                                                RealFaceLandmarkAnalyzer { metrics ->
-                                                    liveMouthMetrics = metrics
-                                                    vm.updateFaceMetrics(metrics.jawOpen, metrics.lipRoundness, metrics.isFaceDetected)
-                                                }
-                                            )
+                                            analysis.setAnalyzer(cameraExecutor, faceAnalyzer)
                                         }
 
                                     val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
