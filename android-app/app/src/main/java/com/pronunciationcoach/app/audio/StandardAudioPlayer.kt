@@ -1,27 +1,33 @@
 package com.pronunciationcoach.app.audio
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 import java.util.UUID
 
 /**
- * Standard native American English pronunciation player.
- * Uses Android TextToSpeech configured for Locale.US at instructional pace (0.85f speed)
- * with exclusive accessibility audio focus attributes.
+ * Enhanced production-ready standard audio playback component with robust TextToSpeech handling,
+ * state machine safeguards, and clear callback lifecycle.
  */
 class StandardAudioPlayer(
-    context: Context,
+    private val context: Context,
     private val onInitListener: ((Boolean) -> Unit)? = null
-) : TextToSpeech.OnInitListener, IStandardAudioPlayer {
+) : IStandardAudioPlayer {
 
-    private val appContext = context.applicationContext
-    private var tts: TextToSpeech? = TextToSpeech(appContext, this)
-    private var isInitialized = false
-    private var initFailed = false
+    private var tts: TextToSpeech? = null
+
+    @Volatile
+    override var isInitialized: Boolean = false
+        private set
+
+    @Volatile
+    override var isPlaying: Boolean = false
+        private set
+
+    @Volatile
+    private var initFailed: Boolean = false
+
     private var pendingWord: String? = null
     private var pendingOnStart: (() -> Unit)? = null
     private var pendingOnComplete: (() -> Unit)? = null
@@ -30,48 +36,52 @@ class StandardAudioPlayer(
     private var currentOnStart: (() -> Unit)? = null
     private var currentOnComplete: (() -> Unit)? = null
 
-    @Volatile
-    override var isPlaying: Boolean = false
-        private set
-
     init {
-        setupProgressListener()
+        initTts()
     }
 
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            val ttsEngine = tts
-            if (ttsEngine != null) {
-                val result = ttsEngine.setLanguage(Locale.US)
-                if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
-                    // Set instructional slow pace for phoneme clarity (0.85f)
-                    ttsEngine.setSpeechRate(0.85f)
-                    ttsEngine.setPitch(1.0f)
-
-                    // AudioAttributes USAGE_ASSISTANCE_ACCESSIBILITY (Spec Section 4.1)
-                    val audioAttributes = AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                    ttsEngine.setAudioAttributes(audioAttributes)
-
-                    isInitialized = true
-                    initFailed = false
-                    onInitListener?.invoke(true)
-
-                    // Execute any pending play request
-                    pendingWord?.let { word ->
-                        val start = pendingOnStart
-                        val comp = pendingOnComplete
-                        pendingWord = null
-                        pendingOnStart = null
-                        pendingOnComplete = null
-                        playWord(word, start, comp)
-                    }
-                    return
-                }
+    private fun initTts() {
+        tts = TextToSpeech(context.applicationContext) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                onTtsSuccess()
+            } else {
+                onTtsFailure()
             }
         }
+    }
+
+    private fun onTtsSuccess() {
+        val engine = tts ?: return
+        val result = engine.setLanguage(Locale.US)
+        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+            initFailed = true
+            isInitialized = false
+            onInitListener?.invoke(false)
+            return
+        }
+
+        engine.setPitch(1.0f)
+        engine.setSpeechRate(0.92f) // slightly slower for instructional clarity
+        setupProgressListener()
+
+        isInitialized = true
+        initFailed = false
+        onInitListener?.invoke(true)
+
+        // Consume any pending request that arrived while TTS was initializing
+        val word = pendingWord
+        val startCb = pendingOnStart
+        val compCb = pendingOnComplete
+        pendingWord = null
+        pendingOnStart = null
+        pendingOnComplete = null
+
+        if (!word.isNullOrEmpty()) {
+            playWord(word, startCb, compCb)
+        }
+    }
+
+    private fun onTtsFailure() {
         isInitialized = false
         initFailed = true
         isPlaying = false
@@ -84,7 +94,8 @@ class StandardAudioPlayer(
     }
 
     private fun setupProgressListener() {
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {\n            override fun onStart(utteranceId: String?) {
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
                 if (utteranceId == activeUtteranceId) {
                     isPlaying = true
                     currentOnStart?.invoke()
@@ -120,8 +131,8 @@ class StandardAudioPlayer(
      */
     override fun playWord(
         text: String,
-        onStart: (() -> Unit)? = null,
-        onComplete: (() -> Unit)? = null
+        onStart: (() -> Unit)?,
+        onComplete: (() -> Unit)?
     ) {
         val cleanText = text.trim()
         if (cleanText.isEmpty()) {
@@ -144,28 +155,51 @@ class StandardAudioPlayer(
 
         stop()
 
-        val utteranceId = UUID.randomUUID().toString()
+        val utteranceId = "word_${UUID.randomUUID()}"
         activeUtteranceId = utteranceId
         currentOnStart = onStart
         currentOnComplete = onComplete
 
-        val params = Bundle().apply {
-            putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
-        }
-
-        val res = tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
-        if (res != TextToSpeech.SUCCESS) {
+        val engine = tts
+        if (engine == null) {
             isPlaying = false
             onComplete?.invoke()
+            return
+        }
+
+        val queueResult = engine.speak(
+            cleanText,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            utteranceId
+        )
+
+        if (queueResult != TextToSpeech.SUCCESS) {
+            isPlaying = false
+            currentOnComplete?.invoke()
         }
     }
 
     /**
-     * Stops current playback immediately.
+     * Immediately stops playback and invokes completion callback to restore UI state.
      */
     override fun stop() {
-        tts?.stop()
+        val wasPlaying = isPlaying
         isPlaying = false
+        activeUtteranceId = null
+        try {
+            tts?.stop()
+        } catch (_: Exception) {}
+
+        if (wasPlaying) {
+            val cb = currentOnComplete
+            currentOnStart = null
+            currentOnComplete = null
+            cb?.invoke()
+        } else {
+            currentOnStart = null
+            currentOnComplete = null
+        }
     }
 
     /**
@@ -173,10 +207,10 @@ class StandardAudioPlayer(
      */
     override fun release() {
         stop()
-        tts?.shutdown()
+        try {
+            tts?.shutdown()
+        } catch (_: Exception) {}
         tts = null
         isInitialized = false
-        currentOnStart = null
-        currentOnComplete = null
     }
 }

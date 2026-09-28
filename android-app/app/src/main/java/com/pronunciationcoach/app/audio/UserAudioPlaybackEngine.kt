@@ -13,7 +13,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -86,7 +85,7 @@ class UserAudioPlaybackEngine(private val context: Context) : IUserAudioPlayback
                 fos.flush()
             }
             return outFile
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             return null
         }
     }
@@ -158,37 +157,19 @@ class UserAudioPlaybackEngine(private val context: Context) : IUserAudioPlayback
                     .build()
 
                 activeAudioTrack = track
+
                 track.play()
+                track.write(pcmData, 0, pcmData.size)
 
-                var offset = 0
-                val chunkSize = 2048
-                while (offset < pcmData.size && isPlaying) {
-                    val bytesToWrite = minOf(chunkSize, pcmData.size - offset)
-                    val written = track.write(pcmData, offset, bytesToWrite)
-                    if (written <= 0) break
-                    offset += written
-                }
-
-                // Wait for the full audio track playback to finish naturally
-                val totalFrames = pcmData.size / 2
-                val durationMs = (totalFrames * 1000L) / sampleRate
-                val startTime = System.currentTimeMillis()
-                val maxWaitMs = durationMs + 400L // allow slight latency margin
-
-                while (isPlaying && (System.currentTimeMillis() - startTime) < maxWaitMs) {
-                    val head = try { track.playbackHeadPosition } catch (e: Exception) { totalFrames }
-                    if (head >= totalFrames) {
-                        break
-                    }
-                    kotlinx.coroutines.delay(25L)
-                }
-            } catch (e: Exception) {
-                // Ignore interruption / playback error
+                // Wait for playback to physically finish draining
+                val durationMs = (pcmData.size / 2.0 / sampleRate * 1000).toLong()
+                kotlinx.coroutines.delay(durationMs + 50)
+            } catch (_: Exception) {
             } finally {
                 try {
                     track?.stop()
                     track?.release()
-                } catch (e: Exception) {}
+                } catch (_: Exception) {}
                 activeAudioTrack = null
                 isPlaying = false
                 withContext(Dispatchers.Main) { onComplete?.invoke() }
@@ -210,7 +191,8 @@ class UserAudioPlaybackEngine(private val context: Context) : IUserAudioPlayback
         try {
             val mp = MediaPlayer().apply {
                 setDataSource(context, Uri.fromFile(file))
-                setOnPreparedListener { player ->\n                    onStart?.invoke()
+                setOnPreparedListener { player ->
+                    onStart?.invoke()
                     player.start()
                 }
                 setOnCompletionListener { player ->
@@ -229,7 +211,7 @@ class UserAudioPlaybackEngine(private val context: Context) : IUserAudioPlayback
                 prepareAsync()
             }
             activeMediaPlayer = mp
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             isPlaying = false
             onComplete?.invoke()
         }
@@ -246,13 +228,13 @@ class UserAudioPlaybackEngine(private val context: Context) : IUserAudioPlayback
         try {
             activeAudioTrack?.stop()
             activeAudioTrack?.release()
-        } catch (e: Exception) {}
+        } catch (_: Exception) {}
         activeAudioTrack = null
 
         try {
             activeMediaPlayer?.stop()
             activeMediaPlayer?.release()
-        } catch (e: Exception) {}
+        } catch (_: Exception) {}
         activeMediaPlayer = null
     }
 
@@ -301,13 +283,13 @@ class UserAudioPlaybackEngine(private val context: Context) : IUserAudioPlayback
             header[15] = ' '.code.toByte()
 
             buffer.position(16)
-            buffer.putInt(16) // Subchunk1Size for PCM
-            buffer.putShort(1.toShort()) // AudioFormat = 1 (PCM)
+            buffer.putInt(16) // SubChunk1Size (16 for PCM)
+            buffer.putShort(1.toShort()) // AudioFormat (1 for PCM)
             buffer.putShort(channels.toShort())
-            buffer.putInt((longSampleRate and 0xffffffffL).toInt())
-            buffer.putInt((byteRate and 0xffffffffL).toInt())
+            buffer.putInt(longSampleRate.toInt())
+            buffer.putInt(byteRate.toInt())
             buffer.putShort((channels * bitsPerSample / 8).toShort()) // BlockAlign
-            buffer.putShort(bitsPerSample.toShort()) // BitsPerSample
+            buffer.putShort(bitsPerSample.toShort())
 
             // "data" sub-chunk
             header[36] = 'd'.code.toByte()
