@@ -1,78 +1,71 @@
-pub mod acoustic;
-pub mod alignment;
-pub mod articulatory;
-pub mod common;
+pub mod audio;
+pub mod evidence;
+pub mod jni;
+pub mod phoneme;
+pub mod policy;
 pub mod scoring;
+pub mod vision;
 
-pub use acoustic::classifier::{ConfidenceScore, VowelClassifier};
-pub use acoustic::detector::{PlosiveBurstDetector, PlosiveClass};
-pub use acoustic::formant::{FormantF1F2, FormantTracker};
-pub use acoustic::fricative::{FricativeClassifier, FricativeType};
-pub use acoustic::voicing::{PitchTracker, VoicingDetector};
-pub use alignment::temporal_aligner::{AlignmentConfig, PhonemeBoundary, TemporalAligner};
-pub use articulatory::articulatory_coach::{
-    ArticulatoryCoach, ArticulatoryCorrection, DynamicCue, GeometryCue, JawDistance,
-    LipApertureState, LipSpreadState, MinimalPairRecommendation, PhonemeArticulatoryProfile,
-    PhysicalActionCategory, SensationFeedback, TonguePosition, TongueShape,
-};
-pub use articulatory::coaching_dictionary::{CoachingDictionary, WordPhonemeProfile};
-pub use common::error::AcousticError;
-pub use common::types::{AcousticFeatureFrame, AudioBuffer16k, Phoneme};
-pub use scoring::decision_tree::{DecisionTreeEngine, DiagnosticOutput, RuleResult};
-pub use scoring::scorer::{
-    AcousticFeaturesDto, ArticulatoryDeviationDto, FeedbackPayloadDto, PhonemeScoreDto,
-    PhonemeTimingDto, PhysicalCuesDto, PronunciationScore, ScoreBreakdownDto, WordScoreDto,
-};
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(test)]
 mod tests {
-    use super::scoring::evidence::{
-        AcousticEvidence, ArticulatoryEvidence, ArticulatoryStateEvidence, EvidenceJson,
-        FormantsEvidence, PitchVoicingEvidence, RuleEvaluationEvidence,
-    };
+    use super::*;
+    use crate::evidence::schema::{AudioEvidence, EvidenceJson, VisualEvidence};
+    use crate::scoring::DeterministicScorer;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_core_version() {
+        assert_eq!(VERSION, "0.1.0");
+    }
+
+    #[test]
+    fn test_funk_scoring_good() {
+        let report = DeterministicScorer::score_funk(0.92, 0.05, 0.45, 0.10);
+        assert!(report.overall_score >= 85);
+        assert_eq!(report.confidence, "High");
+        assert_eq!(report.phoneme_scores.len(), 4);
+    }
+
+    #[test]
+    fn test_funk_scoring_ah_confusion() {
+        // High jaw opening (>0.65) and strong confusion with /ɑ/ (0.42)
+        let report = DeterministicScorer::score_funk(0.48, 0.42, 0.72, 0.08);
+        assert!(report.overall_score < 80);
+        let uh = report
+            .phoneme_scores
+            .iter()
+            .find(|p| p.phoneme == "ʌ")
+            .unwrap();
+        assert!(uh.is_primary_issue);
+        assert_eq!(uh.likely_confusion.as_deref(), Some("ɑ"));
+        assert_eq!(report.next_exercise, "minimal_pair_ʌ_ɑ");
+    }
 
     #[test]
     fn test_evidence_json_roundtrip() {
+        let mut confs = HashMap::new();
+        confs.insert("ɑ".to_string(), 0.31);
         let ev = EvidenceJson {
-            case_id: "TC-01".to_string(),
-            audio_source: "synth".to_string(),
-            sample_rate: 16000,
-            duration_ms: 600.0,
-            acoustic: AcousticEvidence {
-                energy_rms: 0.12,
-                spectral_centroid: 2450.0,
-                zero_crossing_rate: 0.08,
-                snr_db: 28.5,
+            target_word: "funk".to_string(),
+            target_phoneme: "ʌ".to_string(),
+            audio: AudioEvidence {
+                target_probability: 0.57,
+                confusions: confs,
+                duration_ms: 148,
+                f1_hz: Some(710.0),
+                f2_hz: Some(1180.0),
+                energy_rms: Some(0.40),
             },
-            formants: FormantsEvidence {
-                f1_hz: 650.0,
-                f2_hz: 1200.0,
-                f3_hz: 2500.0,
-                bandwidth_f1: 80.0,
-                bandwidth_f2: 110.0,
+            visual: VisualEvidence {
+                jaw_open: 0.71,
+                lip_roundness: 0.08,
+                mouth_width: Some(0.59),
+                mouth_stretch: Some(0.34),
+                lip_closure: Some(0.03),
             },
-            pitch_voicing: PitchVoicingEvidence {
-                mean_pitch_hz: 120.0,
-                voicing_ratio: 0.85,
-                jitter: 0.012,
-                shimmer: 0.035,
-            },
-            articulatory: ArticulatoryEvidence {
-                lip_rounding: 0.2,
-                lip_aperture: 0.65,
-                tongue_advancement: 0.5,
-                tongue_height: 0.4,
-                jaw_open: 0.6,
-            },
-            rules_triggered: vec![RuleEvaluationEvidence {
-                rule_name: "test_rule".to_string(),
-                condition: "f1 > 600".to_string(),
-                passed: true,
-                deduction: 0.0,
-            }],
-            overall_score: 95.0,
-            visual_evidence: None,
-            cross_modal: None,
+            context: None,
         };
 
         let s = serde_json::to_string(&ev).unwrap();
