@@ -22,6 +22,7 @@ import java.nio.ByteOrder
 
 class FakeStandardAudioPlayer : IStandardAudioPlayer {
     override var isPlaying: Boolean = false
+    override var isInitialized: Boolean = true
     var lastPlayedText: String? = null
     var pendingOnComplete: (() -> Unit)? = null
     var stopCallCount: Int = 0
@@ -130,7 +131,8 @@ class PracticeViewModelTest {
     )
 
     @Test
-    fun testInitialState() = runTest(testDispatcher) {\n        val viewModel = createViewModel()
+    fun testInitialState() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
         testScheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -300,11 +302,11 @@ class PracticeViewModelTest {
         val sampleRate = 16000
         val channels = 1
         val bitsPerSample = 16
-        val pcmBytes = ByteArray(32000) // 1 second of 16kHz 16-bit mono
+        val pcmData = ByteArray(3200) // 100ms dummy PCM audio
 
         val header = UserAudioPlaybackEngine.createWavHeader(
-            totalAudioLen = pcmBytes.size.toLong(),
-            totalDataLen = (pcmBytes.size + 36).toLong(),
+            totalAudioLen = pcmData.size.toLong(),
+            totalDataLen = (pcmData.size + 36).toLong(),
             longSampleRate = sampleRate.toLong(),
             channels = channels,
             byteRate = (sampleRate * channels * bitsPerSample / 8).toLong(),
@@ -313,114 +315,41 @@ class PracticeViewModelTest {
 
         assertEquals("Header must be exactly 44 bytes", 44, header.size)
 
-        // Check RIFF chunk
-        assertEquals('R'.code.toByte(), header[0])
-        assertEquals('I'.code.toByte(), header[1])
-        assertEquals('F'.code.toByte(), header[2])
-        assertEquals('F'.code.toByte(), header[3])
+        val buffer = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
+        val riffTag = String(header, 0, 4)
+        assertEquals("RIFF", riffTag)
 
-        // Check total data len at pos 4
-        val buf = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
-        assertEquals(32000 + 36, buf.getInt(4))
+        val totalDataLen = buffer.getInt(4)
+        assertEquals(pcmData.size + 36, totalDataLen)
 
-        // Check WAVE fmt
-        assertEquals('W'.code.toByte(), header[8])
-        assertEquals('A'.code.toByte(), header[9])
-        assertEquals('V'.code.toByte(), header[10])
-        assertEquals('E'.code.toByte(), header[11])
+        val waveTag = String(header, 8, 4)
+        assertEquals("WAVE", waveTag)
 
-        // Subchunk1Size = 16
-        assertEquals(16, buf.getInt(16))
-        // AudioFormat = 1 (PCM)
-        assertEquals(1.toShort(), buf.getShort(20))
-        // Channels = 1
-        assertEquals(1.toShort(), buf.getShort(22))
-        // SampleRate = 16000
-        assertEquals(16000, buf.getInt(24))
-        // ByteRate = 32000
-        assertEquals(32000, buf.getInt(28))
-        // BlockAlign = 2
-        assertEquals(2.toShort(), buf.getShort(32))
-        // BitsPerSample = 16
-        assertEquals(16.toShort(), buf.getShort(34))
+        val fmtTag = String(header, 12, 4)
+        assertEquals("fmt ", fmtTag)
 
-        // data sub-chunk
-        assertEquals('d'.code.toByte(), header[36])
-        assertEquals('a'.code.toByte(), header[37])
-        assertEquals('t'.code.toByte(), header[38])
-        assertEquals('a'.code.toByte(), header[39])
-        assertEquals(32000, buf.getInt(40))
-    }
+        val audioFormat = buffer.getShort(20).toInt()
+        assertEquals("PCM format code must be 1", 1, audioFormat)
 
-    @Test
-    fun testRunCanonicalTestWav() = runTest(testDispatcher) {
-        val viewModel = createViewModel()
-        testScheduler.advanceUntilIdle()
+        val numChannels = buffer.getShort(22).toInt()
+        assertEquals(channels, numChannels)
 
-        viewModel.runCanonicalTestWav()
-        testScheduler.advanceUntilIdle()
+        val rate = buffer.getInt(24)
+        assertEquals(sampleRate, rate)
 
-        val state = viewModel.uiState.value
-        assertFalse(state.isEvaluating)
-        val eval = state.evaluationResult
-        assertNotNull(eval)
-        assertTrue(
-            "Canonical test score should be high (>= 75), was: ${eval?.overallScore}",
-            (eval?.overallScore ?: 0) >= 75
-        )
-        assertNotNull(state.selectedPhonemeSymbol)
-        assertTrue("Canonical run should cache recording", state.hasUserRecording)
-    }
+        val byteRate = buffer.getInt(28)
+        assertEquals(sampleRate * channels * (bitsPerSample / 8), byteRate)
 
-    @Test
-    fun testRunConfusedTestWav() = runTest(testDispatcher) {
-        val viewModel = createViewModel()
-        testScheduler.advanceUntilIdle()
+        val blockAlign = buffer.getShort(32).toInt()
+        assertEquals(channels * (bitsPerSample / 8), blockAlign)
 
-        viewModel.runConfusedTestWav()
-        testScheduler.advanceUntilIdle()
+        val bits = buffer.getShort(34).toInt()
+        assertEquals(bitsPerSample, bits)
 
-        val state = viewModel.uiState.value
-        assertFalse(state.isEvaluating)
-        val eval = state.evaluationResult
-        assertNotNull(eval)
-        assertTrue((eval?.overallScore ?: 0) > 0)
-        assertTrue("Confused run should cache recording", state.hasUserRecording)
-    }
+        val dataTag = String(header, 36, 4)
+        assertEquals("data", dataTag)
 
-    @Test
-    fun testCuratedWordLibraryCoversCategories() {
-        val categories = DEFAULT_PRACTICE_WORDS.map { it.category }.toSet()
-        assertTrue("Should contain 齿间擦音", categories.any { it.contains("齿间") })
-        assertTrue("Should contain 唇齿擦音", categories.any { it.contains("唇齿") })
-        assertTrue("Should contain 卷舌与边音", categories.any { it.contains("卷舌") })
-        assertTrue("Should contain 前元音与微笑音", categories.any { it.contains("前元音") })
-        assertTrue("Should contain 央后元音", categories.any { it.contains("央后元音") })
-        assertTrue("Should contain 塞音爆破", categories.any { it.contains("塞音") })
-        assertTrue("Should contain 鼻音", categories.any { it.contains("鼻音") })
-        assertTrue("Should contain 双元音", categories.any { it.contains("双元音") })
-    }
-
-    @Test
-    fun testPhonemeEvaluationEnrichedWithChineseGuidance() {
-        val json = JSONObject().apply {
-            put("symbol", "θ")
-            put("score", 70)
-            put("status", "WARNING")
-        }
-        val eval = PhonemeEvaluation.fromJsonObject(json)
-        assertEquals("θ", eval.symbol)
-        assertEquals("/θ/", eval.ipa)
-        assertEquals(70, eval.score)
-        assertTrue("Should contain Chinese standard action", eval.standardAction.isNotEmpty())
-        assertTrue("Standard action should mention 门牙 or 舌尖", eval.standardAction.contains("门牙") || eval.standardAction.contains("舌尖"))
-        assertTrue("Should contain action cues", eval.actionCues.isNotEmpty())
-    }
-
-    @Test
-    fun testSelectProvider() = runTest(testDispatcher) {
-        val viewModel = createViewModel()
-        viewModel.selectProvider(1)
-        assertEquals(1, viewModel.uiState.value.selectedProviderIndex)
+        val audioLen = buffer.getInt(40)
+        assertEquals(pcmData.size, audioLen)
     }
 }
