@@ -5,6 +5,7 @@ package com.pronunciationcoach.app.audio
  */
 interface IStandardAudioPlayer {
     val isPlaying: Boolean
+    val isInitialized: Boolean
     fun playWord(
         text: String,
         onStart: (() -> Unit)? = null,
