@@ -295,7 +295,24 @@ class PracticeViewModel(
             val audioData = activeAudioSource.stopRecording()
             val videoData = activeVideoSource.stopCapture()
 
-            // Cache recording for instant user playback
+            val durationMs = (audioData.pcmData.size / 32).toLong()
+            val rms = calculatePcmRms(audioData.pcmData)
+
+            // VAD Guard: Discard silence or faint background jitter (<250ms or RMS < 0.012)
+            if (durationMs < MIN_AUDIO_DURATION_MS || rms < MIN_AUDIO_RMS_THRESHOLD) {
+                _uiState.update {
+                    it.copy(
+                        isEvaluating = false,
+                        evaluationResult = null,
+                        selectedPhonemeSymbol = null,
+                        hasUserRecording = false,
+                        statusMessage = "未检测到有效声音，请靠近麦克风大声朗读"
+                    )
+                }
+                return@launch
+            }
+
+            // Cache recording for instant user playback only if valid voice was detected
             userAudioPlaybackEngine?.saveRecording(audioData.pcmData, audioData.sampleRate)
 
             _uiState.update { it.copy(hasUserRecording = true) }
@@ -326,6 +343,23 @@ class PracticeViewModel(
         jawOpen: Float,
         lipRoundness: Float
     ) {
+        val durationMs = (pcmData.size / 32).toLong()
+        val rms = calculatePcmRms(pcmData)
+
+        // VAD Guard: Discard silence or ambient noise
+        if (durationMs < MIN_AUDIO_DURATION_MS || rms < MIN_AUDIO_RMS_THRESHOLD) {
+            _uiState.update {
+                it.copy(
+                    isEvaluating = false,
+                    evaluationResult = null,
+                    selectedPhonemeSymbol = null,
+                    hasUserRecording = false,
+                    statusMessage = "未检测到有效声音，请靠近麦克风大声朗读"
+                )
+            }
+            return
+        }
+
         _uiState.update { it.copy(isEvaluating = true) }
 
         val targetWord = _uiState.value.targetWord
@@ -466,5 +500,26 @@ class PracticeViewModel(
         stopAllAudio()
         standardAudioPlayer?.release()
         userAudioPlaybackEngine?.release()
+    }
+
+    companion object {
+        const val MIN_AUDIO_DURATION_MS = 250L
+        const val MIN_AUDIO_RMS_THRESHOLD = 0.012f
+
+        /**
+         * Computes Root-Mean-Square (RMS) amplitude from 16-bit PCM Mono audio data.
+         * Normalized scale: 0.0 (silent) to 1.0 (maximum amplitude).
+         */
+        fun calculatePcmRms(pcmData: ByteArray): Float {
+            if (pcmData.size < 2) return 0f
+            var sumSquares = 0.0
+            val sampleCount = pcmData.size / 2
+            for (i in 0 until sampleCount) {
+                val sample = (pcmData[i * 2].toInt() and 0xFF) or (pcmData[i * 2 + 1].toInt() shl 8)
+                val normalized = sample.toShort() / 32768.0
+                sumSquares += normalized * normalized
+            }
+            return kotlin.math.sqrt(sumSquares / sampleCount).toFloat()
+        }
     }
 }

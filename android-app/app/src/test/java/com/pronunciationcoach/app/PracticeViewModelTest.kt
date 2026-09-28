@@ -371,4 +371,52 @@ class PracticeViewModelTest {
         val audioLen = buffer.getInt(40)
         assertEquals(pcmData.size, audioLen)
     }
+
+    @Test
+    fun testVadRejectsSilentAudio() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+        testScheduler.advanceUntilIdle()
+
+        // Generate 500ms of pure silence (all 0 bytes)
+        val silentPcm = ByteArray(16000) // 500ms at 16kHz 16-bit mono
+
+        viewModel.evaluateAudioPcm(silentPcm)
+        testScheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertNull("Silent input should NOT produce evaluation result", state.evaluationResult)
+        assertFalse("Silent input should not set hasUserRecording", state.hasUserRecording)
+        assertEquals("未检测到有效声音，请靠近麦克风大声朗读", state.statusMessage)
+    }
+
+    @Test
+    fun testVadRejectsShortAudioSpike() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+        testScheduler.advanceUntilIdle()
+
+        // Generate 100ms short audio burst (< 250ms threshold)
+        val shortPcm = ByteArray(3200) { 0x50 }
+
+        viewModel.evaluateAudioPcm(shortPcm)
+        testScheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertNull("Short spike (<250ms) should be discarded", state.evaluationResult)
+        assertEquals("未检测到有效声音，请靠近麦克风大声朗读", state.statusMessage)
+    }
+
+    @Test
+    fun testCalculatePcmRms() {
+        val silent = ByteArray(100)
+        assertEquals(0.0f, PracticeViewModel.calculatePcmRms(silent), 0.0001f)
+
+        // Generate maximum amplitude DC block (0x7FFF = 32767)
+        val maxAmp = ByteArray(100)
+        for (i in 0 until 50) {
+            maxAmp[i * 2] = 0xFF.toByte()
+            maxAmp[i * 2 + 1] = 0x7F.toByte()
+        }
+        val rms = PracticeViewModel.calculatePcmRms(maxAmp)
+        assertTrue("RMS of max amplitude should be close to 1.0", rms > 0.99f)
+    }
 }

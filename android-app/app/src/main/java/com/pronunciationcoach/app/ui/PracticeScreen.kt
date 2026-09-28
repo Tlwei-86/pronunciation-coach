@@ -389,6 +389,21 @@ fun PracticeScreen(
                 }
             }
 
+            if (uiState.evaluationResult == null && !uiState.isRecording && !uiState.isEvaluating && uiState.statusMessage.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = uiState.statusMessage,
+                        color = Color(0xFF94A3B8),
+                        fontSize = 14.sp
+                    )
+                }
+            }
+
             // ========================================================
             // SECTION 4: Minimalist Diagnosis Result Card
             // ========================================================
