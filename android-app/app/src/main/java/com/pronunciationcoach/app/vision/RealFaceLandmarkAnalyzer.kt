@@ -33,9 +33,9 @@ class RealFaceLandmarkAnalyzer(
 ) : ImageAnalysis.Analyzer {
 
     companion object {
-        private const val INTERVAL_RECORDING_MS = 80L        // High performance (~12.5 FPS)
-        private const val INTERVAL_IDLE_FACE_MS = 200L       // Idle preview with face detected (~5 FPS)
-        private const val INTERVAL_STANDBY_NO_FACE_MS = 600L // Standby heartbeat (~1.6 FPS)
+        private const val INTERVAL_RECORDING_MS = 120L        // High performance (~12.5 FPS)
+        private const val INTERVAL_IDLE_FACE_MS = 800L       // Idle preview with face detected (~5 FPS)
+        private const val INTERVAL_STANDBY_NO_FACE_MS = 1500L // Standby heartbeat (~1.6 FPS)
         private const val NO_FACE_TIMEOUT_MS = 2000L         // Timeout before falling back to standby
     }
 
